@@ -1,7 +1,3 @@
-# You can use this nim template to jump start your nim library or project.
+# Nim-TinyUSB
 
-This template includes:
-* MIT licence
-* src directory and a private common.nim
-* test directory
-* GitHub Actions to run the tests on GitHub
+[TinyUSB](https://docs.tinyusb.org/en/latest/) bindings for the Nim language. TinyUSB is a USB host and device stack for microprocessors.
