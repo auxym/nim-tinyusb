@@ -164,9 +164,9 @@ type
     length*: uint8
     descriptorType*: UsbDescriptorType
     usbVersion*: BcdVersion
-    deviceClass*: UsbClass
-    deviceSubclass*: UsbSubclassCode
-    deviceProtocol*: UsbProtocolCode
+    class*: UsbClass
+    subclass*: UsbSubclassCode
+    protocol*: UsbProtocolCode
     maxPacketSize*: Ep0MaxPacketSize
     vendorId*: uint16
     productId*: uint16
@@ -178,18 +178,30 @@ type
 
   ConfigurationDescriptor* {.packed, importc: "tusb_desc_configuration_t", completeStruct.} = object
     length*: uint8
-    descriptorType*: uint8
+    descriptorType*: UsbDescriptorType
     totalLength*: uint16
     numInterfaces*: uint8
-    configurationValue*: ConfigurationValue
-    configurationStr*: StringIndex
+    value*: ConfigurationValue
+    str*: StringIndex
     attributes*: set[ConfigurationAttribute]
-    maxPower*: uint8
+    maxPower*: uint8 # Each increment is 2 mA
+
+  InterfaceDescriptor* {.packed, importc: "tusb_desc_interface_t", completeStruct.} = object
+    length*: uint8
+    descriptorType*: UsbDescriptorType
+    number*: InterfaceNumber # zero-based index of this IF for the configuration
+    alternateSetting*: uint8
+    numEndpoints*: uint8
+    class*: UsbClass
+    subclass*: UsbSubclassCode
+    protocol*: UsbProtocolCode
+    str*: StringIndex
 {.pop.}
 
 static:
   assert DeviceDescriptor.sizeof == 18, "Incorrect type size"
   assert ConfigurationDescriptor.sizeof == 9, "Incorrect type size"
+  assert InterfaceDescriptor.sizeof == 9, "Incorrect type size"
 
 # Templates for callback definitions
 
