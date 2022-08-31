@@ -1,4 +1,4 @@
-import tinyusb/common
+import ./common
 
 {.push header: "tusb.h".}
 
@@ -96,14 +96,63 @@ type
     SelfPowered
     Reserved7 # Should always be set per USB 2.0 spec
 
+  EpDirection* {.pure.} = enum
+    Out = 0
+    In = 1
+
+  TransferType* {.pure.} = enum
+    Control = 0b00
+    Isochronous = 0b01
+    Bulk = 0b10
+    Interrupt = 0b11
+
+  IsoSyncType* {.pure.} = enum
+    None = 0b00
+    Async = 0b01
+    Adaptive = 0b10
+    Sync = 0b11
+
+  IsoUsageType* {.pure.} = enum
+    Data = 0b00
+    Feedback = 0b01
+    Implicit = 0b10
+
+  AdditionalTransactions* {.pure.} = enum
+    None = 0b00
+    add1 = 0b01
+    add2 = 0b10
+
+  EpAddress* = distinct uint8
+  EpAttributes* = distinct uint8
+  EpDescMaxPacketSize* = distinct uint16
+
 static:
   assert sizeof(set[ConfigurationAttribute]) == 1
 
-func createBcdVersion*(major: 0..255, minor: 0..15, sub: 0..15): BcdVersion {.compileTime.} =
+func initBcdVersion*(major: 0..255, minor: 0..15, sub: 0..15): BcdVersion =
   BcdVersion((major.uint16 shl 8) or (minor.uint16 shl 4) or sub.uint16)
 
-func configFlags*(remoteWakeup: bool = false, selfPowered: bool = false):
-    set[ConfigurationAttribute] =
+func initEndpointAddress*(epnum: 0..15, dir: EpDirection): EpAddress =
+  EpAddress epnum.ord.uint8 or (dir.ord.uint8 shl 7)
+
+func initEndpointAttributes*(xfer: TransferType,
+                             sync: IsoSyncType = IsoSyncType.None,
+                             usage: IsoUsageType = IsoUsageType.Data):
+                             EpAttributes =
+  var val = xfer.ord.uint8
+  if xfer == TransferType.Isochronous:
+      val = val or (sync.ord.uint8 shl 2) or (usage.ord.uint8 shl 4)
+  result = EpAttributes val
+
+func initEndpointDescMaxPacketSize*(
+    size: 0..2047,
+    addTransactions: AdditionalTransactions = AdditionalTransactions.None):
+    EpDescMaxPacketSize =
+  EpDescMaxPacketSize (size or (addTransactions.uint8.ord shl 11))
+
+func initConfigAttributes*(remoteWakeup: bool = false,
+                           selfPowered: bool = false):
+                           set[ConfigurationAttribute] =
   # According to USB 2.0 spec, bit D7 must always be one
   result = {ConfigurationAttribute.Reserved7}
   if remoteWakeup: result.incl ConfigurationAttribute.RemoteWakeup
@@ -196,12 +245,21 @@ type
     subclass*: UsbSubclassCode
     protocol*: UsbProtocolCode
     str*: StringIndex
+
+  EndpointDescriptor* {.packed, importc: "tusb_desc_endpoint_t", completeStruct.} = object
+    length*: uint8
+    descriptorType*: UsbDescriptorType
+    address*: EpAddress
+    attributes*: EpAttributes
+    maxPacketSize*: EpDescMaxPacketSize
+    interval: uint8
 {.pop.}
 
 static:
   assert DeviceDescriptor.sizeof == 18, "Incorrect type size"
   assert ConfigurationDescriptor.sizeof == 9, "Incorrect type size"
   assert InterfaceDescriptor.sizeof == 9, "Incorrect type size"
+  assert EndpointDescriptor.sizeof == 7, "Incorrect type size"
 
 # Templates for callback definitions
 
