@@ -158,49 +158,6 @@ func initConfigAttributes*(remoteWakeup: bool = false,
   if remoteWakeup: result.incl ConfigurationAttribute.RemoteWakeup
   if selfPowered: result.incl ConfigurationAttribute.SelfPowered
 
-# Subclass and protocol codes for the Misc class
-const
-  # Subclass 0x01
-  UsbMiscSubclassSync* = 1.UsbSubclassCode
-  UsbMiscProtocolActiveSync* = 1.UsbProtocolCode
-  UsbMiscProtocolPalmSync* = 2.UsbProtocolCode
-
-  # Subclass 0x02
-  UsbMiscSubclassIad* = 2.UsbSubclassCode # Interface Association Descriptor
-  UsbMiscProtocolIad* = 1.UsbProtocolCode # Interface Association Descriptor
-  UsbMiscProtocolWamp* = 2.UsbProtocolCode # Wire Adapter Multifunction Peripheral
-
-  # Subclass 0x03
-  UsbMiscSubclassCbaf* = 3.UsbSubclassCode # Cable Based Association Framework
-  UsbMiscProtocolCbaf* = 1.UsbProtocolCode # Cable Based Association Framework
-
-  # Subclass 0x04
-  UsbMiscSubclassRndis* = 4.UsbSubclassCode # RNDIS
-  UsbMiscProtocolRndisEth* = 1.UsbProtocolCode # RNDIS over Ethernet
-  UsbMiscProtocolRndisWifi* = 2.UsbProtocolCode # RNDIS over WiFi
-  UsbMiscProtocolRndisWimax* = 3.UsbProtocolCode # RNDIS over WiMax
-  UsbMiscProtocolRndisWwan* = 4.UsbProtocolCode # RNDIS over WWAN
-  UsbMiscProtocolRndisIpv4* = 5.UsbProtocolCode # RNDIS over IPv4
-  UsbMiscProtocolRndisIpv6* = 6.UsbProtocolCode # RNDIS over IPv6
-  UsbMiscProtocolRndisGprs* = 7.UsbProtocolCode # RNDIS over GPRS
-
-  # Subclass 0x05
-  # Machine Vision Device conforming to the USB3 Vision specification
-  UsbMiscSubclassUsb3Vision* = 5.UsbSubclassCode
-  UsbMiscProtocolVisionControl* = 0.UsbProtocolCode # USB3 Vision Control Interface
-  UsbMiscProtocolVisionEvent* = 1.UsbProtocolCode # USB3 Vision Event Interface
-  UsbMiscProtocolVisionStreaming* = 2.UsbProtocolCode # USB3 Vision Streaming Interface
-
-  # Subclass 0x06
-  UsbMiscSubclassStep* = 6.UsbSubclassCode
-  UsbMiscProtocolStepStream* = 0.UsbProtocolCode # STEP.Stream Transport Efficient Protocol
-  UsbMiscProtocolStepRaw* = 1.UsbProtocolCode # STEP RAW. Stream Transport Efficient Protocol 
-
-  # Subclass 0x07
-  UsbMiscSubclassDvb* = 7.UsbSubclassCode
-  UsbMiscProtocolDvbCiInIad* = 0.UsbProtocolCode
-  UsbMiscProtocolDvbCiInInterface* = 1.UsbProtocolCode
-  UsbMiscProtocolDvbCiInMedia* = 2.UsbProtocolCode
 
 # Generic protocol codes, applicable for any class/subclass
 const
