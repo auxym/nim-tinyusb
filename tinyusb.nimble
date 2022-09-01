@@ -7,3 +7,4 @@ license     = "MIT"
 srcDir = "src"
 
 requires "nim >= 1.6.0"
+requires "encode < 1.0.0"

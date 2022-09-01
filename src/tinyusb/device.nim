@@ -1,4 +1,6 @@
 import ./common
+import ./langids
+import encode # https://github.com/treeform/encode
 
 {.push header: "tusb.h".}
 
@@ -217,6 +219,56 @@ static:
   assert ConfigurationDescriptor.sizeof == 9, "Incorrect type size"
   assert InterfaceDescriptor.sizeof == 9, "Incorrect type size"
   assert EndpointDescriptor.sizeof == 7, "Incorrect type size"
+
+
+# String descriptors
+
+proc initStringDesc0*[N](langs: openArray[LangId],
+                         dest: var array[N, uint8]) =
+  ## Create string descriptor zero, which is the
+  ##
+  ## The result is put into the byte array `dest`, which should be at least of
+  ## size `langs.len * 2 + 2`, otherwise the list of languages will be
+  ## truncated.
+  let
+    langsSize = sizeof(LangId) * langs.len
+
+    # The bitwise and here results in the next lower multiple of 2, to ensure
+    # that we don't cut a langid in half if we truncate.
+    descLen = uint8(
+      min([uint8.high.int, langsSize + 2, dest.len]) and (not 1)
+    )
+
+  dest[0] = descLen.uint8
+  dest[1] = UsbDescriptorType.DtString.ord
+  copyMem(dest[2].addr, langs[0].unsafeAddr, (descLen - 2))
+
+func initStringDesc*[N](str: string, dest: var array[N, uint8]) =
+  ## Create a string descriptor from a utf8 string.
+  ##
+  ## The result is put into the byte array `dest`, which should be large enough
+  ## to fit string `str` encoded as UTF-16LE, otherwise the string will be
+  ## truncated to fit.
+  let
+    utf16str = str.toUTF16LE
+
+    # The bitwise and here results in the next lower multiple of 2, to ensure
+    # that we don't cut a codepoint in half (only works for 2-byte characters)
+    descLen = uint8(
+      min([uint8.high.int, (utf16str.len + 2), dest.len]) and (not 1)
+    )
+
+  dest[0] = descLen.uint8
+  dest[1] = UsbDescriptorType.DtString.ord
+  copyMem(dest[2].addr, utf16str[0].unsafeAddr, (descLen - 2))
+
+func getUtf8String*(strDesc: openArray[uint8]): string =
+  ## Utility function to extract a UTF-8 string from a USB String Descriptor
+  let utf16len = strDesc[0] - 2
+  var tmp = newString(utf16len)
+  copyMem(tmp[0].addr, strDesc[2].unsafeAddr, utf16len)
+  result = fromUTF16LE tmp
+
 
 # Templates for callback definitions
 
