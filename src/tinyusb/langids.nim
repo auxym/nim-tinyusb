@@ -48,7 +48,6 @@ type LangId* {.size: 2, pure.} = enum
   Armenian = 0x042b
   AzeriCyrillic = 0x042c
   Basque = 0x042d
-  Basque = 0x042d
   Macedonian = 0x042f
   Afrikaans = 0x0436
   Georgian = 0x0437

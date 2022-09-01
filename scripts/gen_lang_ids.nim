@@ -46,17 +46,20 @@ for ln in usbidsFileName.lines:
   if ln.startsWith("L "):
     let parts = ln.splitWhitespace(maxsplit=2)
     if parts[2] == "forgotten":
+      curlang = -1
       continue
     curlang = parts[1].parseHexInt
     curlangName = parts[2]
     sublangCount = 0
-  if curlang > 0 and ln.startsWith("\t"):
+  elif curlang > 0 and ln.startsWith("\t"):
     sublangCount.inc
     let
       parts = ln.splitWhitespace(maxsplit=1)
       sublang = parts[0].parseHexInt
       sublangName = parts[1]
     langs.add initLangEntry(curlang, sublang, curlangName, sublangName)
+  elif curlang > 0:
+    curlang = -1
 
 sort(langs)
 
