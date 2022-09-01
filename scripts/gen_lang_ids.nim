@@ -19,6 +19,7 @@ func sanitizeLangName(name: string): string =
   result = name
   result = result.replace(" ", "")
   result = result.replace(".", "")
+  result = result.replace(",", "")
 
 func initLangEntry(langId, sublangId: int, langName, sublangName: string): LangIdEntry =
   result.id = langId or (sublangId shl 10)
