@@ -60,8 +60,8 @@ type
   UsbDescriptorType* {.size: sizeof(cchar), pure.} = enum
     Device = 0x01
     Configuration = 0x02
-    DtString = 0x03
-    DtInterface = 0x04
+    String = 0x03
+    Interface = 0x04
     Endpoint = 0x05
     Qualifier = 0x06
     OtherSpeedConfig = 0x07
@@ -160,6 +160,7 @@ func initConfigAttributes*(remoteWakeup: bool = false,
   if remoteWakeup: result.incl ConfigurationAttribute.RemoteWakeup
   if selfPowered: result.incl ConfigurationAttribute.SelfPowered
 
+const StringIndexNone* = 0.StringIndex
 
 # Generic protocol codes, applicable for any class/subclass
 const
@@ -189,7 +190,7 @@ type
     descriptorType*: UsbDescriptorType
     totalLength*: uint16
     numInterfaces*: uint8
-    value*: ConfigurationValue
+    value*: uint8
     str*: StringIndex
     attributes*: set[ConfigurationAttribute]
     maxPower*: uint8 # Each increment is 2 mA
@@ -197,8 +198,8 @@ type
   InterfaceDescriptor* {.packed, importc: "tusb_desc_interface_t", completeStruct.} = object
     length*: uint8
     descriptorType*: UsbDescriptorType
-    number*: InterfaceNumber # zero-based index of this IF for the configuration
-    alternateSetting*: uint8
+    number*: uint8 # zero-based index of this IF for the configuration
+    alternate*: uint8
     numEndpoints*: uint8
     class*: UsbClass
     subclass*: UsbSubclassCode
@@ -219,6 +220,61 @@ static:
   assert ConfigurationDescriptor.sizeof == 9, "Incorrect type size"
   assert InterfaceDescriptor.sizeof == 9, "Incorrect type size"
   assert EndpointDescriptor.sizeof == 7, "Incorrect type size"
+
+func initDeviceDescriptor*(
+    usbVersion: BcdVersion, class: UsbClass, subclass: UsbSubclassCode,
+    protocol: UsbProtocolCode, ep0Size: Ep0MaxPacketSize, vendorId: uint16,
+    productId: uint16, deviceVersion: BcdVersion, manufacturerStr: StringIndex,
+    productStr: StringIndex, serialNumberStr: StringIndex, numConfigurations: 1..255
+    ): DeviceDescriptor =
+  DeviceDescriptor(
+    length: sizeof(DeviceDescriptor).uint8,
+    descriptorType: UsbDescriptorType.Device,
+    usbVersion: usbVersion,
+    class: class,
+    subclass: subclass,
+    protocol: protocol,
+    ep0MaxPacketSize: ep0Size,
+    vendorId: vendorId,
+    productId: productId,
+    deviceVersion: deviceVersion,
+    manufacturerStr: manufacturerStr,
+    productStr: productStr,
+    serialNumberStr: serialNumberStr,
+    numConfigurations: numConfigurations.uint8
+  )
+
+func initConfigurationDescriptor*(
+    val: uint8, totalLength: uint16, numItf: 1..255, powerma: 0..500,
+    str: StringIndex = StringIndexNone, remoteWakeup=false, selfPowered=false
+    ): ConfigurationDescriptor =
+  ConfigurationDescriptor(
+    length: sizeof(ConfigurationDescriptor).uint8,
+    descriptorType: UsbDescriptorType.Configuration,
+    totalLength: totalLength,
+    numInterfaces: numItf.uint8,
+    value: val,
+    str: str,
+    attributes: initConfigAttributes(remoteWakeup, selfPowered),
+    maxPower: (powerma div 2).uint8
+  )
+
+func initInterfaceDescriptor*(number: uint8, alt: uint8, numEp: 1..255,
+                              class: UsbClass, subclass: UsbSubclassCode,
+                              protocol: UsbProtocolCode,
+                              str: StringIndex = StringIndexNone
+                             ): InterfaceDescriptor =
+  InterfaceDescriptor(
+    length: sizeof(InterfaceDescriptor).uint8,
+    descriptorType: UsbDescriptorType.Interface,
+    number: number,
+    alternate: alt,
+    numEndpoints: numEp.uint8,
+    class: class,
+    subclass: subclass,
+    protocol: protocol,
+    str: str
+  )
 
 
 # String descriptors
