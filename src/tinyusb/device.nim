@@ -175,13 +175,13 @@ type
     class*: UsbClass
     subclass*: UsbSubclassCode
     protocol*: UsbProtocolCode
-    maxPacketSize*: Ep0MaxPacketSize
+    ep0MaxPacketSize*: Ep0MaxPacketSize
     vendorId*: uint16
     productId*: uint16
     deviceVersion*: BcdVersion
     manufacturerStr*: StringIndex
     productStr*: StringIndex
-    serialNumberStr: StringIndex
+    serialNumberStr*: StringIndex
     numConfigurations*: uint8
 
   ConfigurationDescriptor* {.packed, importc: "tusb_desc_configuration_t", completeStruct.} = object
