@@ -1,6 +1,7 @@
 import tinyusb/common
 import tinyusb/device
 import tinyusb/langids
+import tinyusb/config
 import tinyusb/class/hid
 import tinyusb/class/cdc
 import tinyusb/class/misc
@@ -8,6 +9,7 @@ import tinyusb/class/misc
 export common
 export device
 export langids
+export config
 export hid
 export cdc
 export misc
