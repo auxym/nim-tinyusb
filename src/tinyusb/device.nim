@@ -1,4 +1,4 @@
-import ./common
+import ./descriptors
 import ./langids
 import encode # https://github.com/treeform/encode
 
@@ -30,7 +30,7 @@ proc usbDeviceConnect*: bool {.importC: "tud_connect".}
 
 {.pop.}
 
-# Device Descriptor configuration
+# Descriptors
 
 type
   UsbClass* {.size: sizeof(cchar), pure.} = enum
@@ -215,11 +215,23 @@ type
     interval: uint8
 {.pop.}
 
+type
+  InterfaceAssociationDescriptor* {.packed.} = object
+    length*: uint8
+    descriptorType*: UsbDescriptorType
+    firstInterface*: uint8
+    interfaceCount*: uint8
+    class*: UsbClass
+    subclass*: UsbSubclassCode
+    protocol*: UsbProtocolCode
+    str*: StringIndex
+
 static:
   assert DeviceDescriptor.sizeof == 18, "Incorrect type size"
   assert ConfigurationDescriptor.sizeof == 9, "Incorrect type size"
   assert InterfaceDescriptor.sizeof == 9, "Incorrect type size"
   assert EndpointDescriptor.sizeof == 7, "Incorrect type size"
+  assert InterfaceDescriptor.sizeof == 8, "Incorrect type size"
 
 func initDeviceDescriptor*(
     usbVersion: BcdVersion, class: UsbClass, subclass: UsbSubclassCode,
@@ -276,6 +288,21 @@ func initInterfaceDescriptor*(number: uint8, alt: uint8, numEp: 1..255,
     str: str
   )
 
+func initInterfaceAssociationDescriptor*(first, count: uint8, class: UsbClass,
+                                         subclass: UsbSubclassCode,
+                                         protocol: UsbProtocolCode,
+                                         str: StringIndex = StringIndexNone
+                                         ): InterfaceAssociationDescriptor =
+  InterfaceAssociationDescriptor(
+    length: sizeof(InterfaceAssociationDescriptor).uint8,
+    descriptorType: UsbDescriptorType.InterfaceAssociation,
+    firstInterface: first,
+    interfaceCount: count,
+    class: class,
+    subclass: subclass,
+    protocol: protocol,
+    str: str
+  )
 
 # String descriptors
 

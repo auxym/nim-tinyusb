@@ -1,4 +1,4 @@
-import ../common
+import ../descriptors
 #  Miscellaneous device class (class code 0xEF)
 
 # Subclass and protocol codes for the Misc class

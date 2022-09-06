@@ -1,4 +1,4 @@
-import tinyusb/common
+import tinyusb/descriptors
 import tinyusb/device
 import tinyusb/langids
 import tinyusb/config
@@ -6,7 +6,7 @@ import tinyusb/class/hid
 import tinyusb/class/cdc
 import tinyusb/class/misc
 
-export common
+export descriptors
 export device
 export langids
 export config
