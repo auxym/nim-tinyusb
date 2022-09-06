@@ -1,4 +1,4 @@
-import ./device
+import ./descriptors
 import std/strformat
 import std/compilesettings
 
