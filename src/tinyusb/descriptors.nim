@@ -104,7 +104,7 @@ type
 
   EpAttributes* = distinct uint8
 
-  EpDescMaxPacketSize* = distinct uint16
+  EpMaxPacketSize* = distinct uint16
 
 static:
   assert sizeof(set[ConfigurationAttribute]) == 1
@@ -112,7 +112,7 @@ static:
 func initBcdVersion*(major: 0..255, minor: 0..15, sub: 0..15): BcdVersion =
   BcdVersion((major.uint16 shl 8) or (minor.uint16 shl 4) or sub.uint16)
 
-func initEndpointAddress*(epnum: 0..15, dir: EpDirection): EpAddress =
+func initEpAddress*(epnum: 0..15, dir: EpDirection): EpAddress =
   EpAddress epnum.ord.uint8 or (dir.ord.uint8 shl 7)
 
 func initEndpointAttributes*(xfer: TransferType,
@@ -127,8 +127,8 @@ func initEndpointAttributes*(xfer: TransferType,
 func initEndpointDescMaxPacketSize*(
     size: 0..2047,
     addTransactions: AdditionalTransactions = AdditionalTransactions.None):
-    EpDescMaxPacketSize =
-  EpDescMaxPacketSize (size or (addTransactions.uint8.ord shl 11))
+    EpMaxPacketSize =
+  EpMaxPacketSize (size or (addTransactions.uint8.ord shl 11))
 
 func initConfigAttributes*(remoteWakeup: bool = false,
                            selfPowered: bool = false):
@@ -176,7 +176,7 @@ type
   InterfaceDescriptor* {.packed, importc: "tusb_desc_interface_t", completeStruct.} = object
     length*: uint8
     descriptorType*: UsbDescriptorType
-    number*: uint8 # zero-based index of this IF for the configuration
+    number*: InterfaceNumber # zero-based index of this IF for the configuration
     alternate*: uint8
     numEndpoints*: uint8
     class*: UsbClass
@@ -189,7 +189,7 @@ type
     descriptorType*: UsbDescriptorType
     address*: EpAddress
     attributes*: EpAttributes
-    maxPacketSize*: EpDescMaxPacketSize
+    maxPacketSize*: EpMaxPacketSize
     interval: uint8
 {.pop.}
 
@@ -197,7 +197,7 @@ type
   InterfaceAssociationDescriptor* {.packed.} = object
     length*: uint8
     descriptorType*: UsbDescriptorType
-    firstInterface*: uint8
+    firstInterface*: InterfaceNumber
     interfaceCount*: uint8
     class*: UsbClass
     subclass*: UsbSubclassCode
@@ -249,7 +249,7 @@ func initConfigurationDescriptor*(
     maxPower: (powerma div 2).uint8
   )
 
-func initInterfaceDescriptor*(number: uint8, alt: uint8, numEp: 1..255,
+func initInterfaceDescriptor*(number: InterfaceNumber, alt: uint8, numEp: 1..255,
                               class: UsbClass, subclass: UsbSubclassCode,
                               protocol: UsbProtocolCode,
                               str: StringIndex = StringIndexNone
@@ -266,7 +266,8 @@ func initInterfaceDescriptor*(number: uint8, alt: uint8, numEp: 1..255,
     str: str
   )
 
-func initInterfaceAssociationDescriptor*(first, count: uint8, class: UsbClass,
+func initInterfaceAssociationDescriptor*(first: InterfaceNumber, count: uint8,
+                                         class: UsbClass,
                                          subclass: UsbSubclassCode,
                                          protocol: UsbProtocolCode,
                                          str: StringIndex = StringIndexNone
