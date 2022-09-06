@@ -23,7 +23,6 @@ type
     Hub = 9
     CdcData = 10
     SmartCard = 11
-    Reserved_12 = 12
     ContentSecurity = 13
     Video = 14
     PersonalHealthcare = 15

@@ -1,4 +1,5 @@
 import ../device
+import ../descriptors
 
 # CDC Device API
 
@@ -132,3 +133,123 @@ proc writeLine*(itf: UsbSerialInterface, s: string) {.inline.} =
 proc flush*(itf: UsbSerialInterface) {.inline.} =
   ## Force sending any data remaining in transmit FIFO
   discard cdcWriteFlush(itf.uint8)
+
+# CDC-specific descriptors
+
+type
+  CdcFunctionalDescriptorSubtype* {.pure, size: sizeof(cchar).} = enum
+    Header = 0x00
+    CallManagement = 0x01
+    AbstractControlManagement = 0x02
+    DirectLineManagement = 0x03
+    TelephoneRinger = 0x04
+    TelephoneReporting = 0x05
+    Union = 0x06
+    CountrySelection = 0x07
+    TelephoneOpMode = 0x08
+    UsbTerminal = 0x09
+    NetworkTerminal = 0x0A
+    ProtocolUnit = 0x0B
+    ExtensionUnit = 0x0C
+    MultiChannelManagement = 0x0D
+    CapiControlManagement = 0x0E
+    Ethernet = 0x0F
+    Atm = 0x10
+    WirelessHandset = 0x11
+    MobileDirectLine = 0x12
+    MdlmDetail = 0x13
+    DeviceManagement = 0x14
+    Obex = 0x15
+    CommandSet = 0x16
+    CommandSetDetail = 0x17
+    TelephoneControl = 0x18
+    ObexServiceIdentifier = 0x19
+    Ncm = 0x1A
+    VendorSpecific = 0xFE
+
+  ## Header Functional Descriptor
+  CdcHeaderDescriptor* {.packed.} = object
+    length: uint8
+    descriptorType: UsbDescriptorType
+    descriptorSubtype: CdcFunctionalDescriptorSubtype
+    cdcVersion: BcdVersion
+
+  ## Union Interface Functional Descriptor
+  ## 
+  ## N is the number of subordinate interfaces
+  CdcUnionDescriptor*[N: Positive] {.packed.} = object
+    length: uint8
+    descriptorType: UsbDescriptorType
+    descriptorSubtype: CdcFunctionalDescriptorSubtype
+    controlInterface: InterfaceNumber
+    subordinates: array[N, InterfaceNumber]
+
+  ## Call management capabilities bitset
+  CallManagementCap* {.pure, size: sizeof(cchar).} = enum
+    CallMgmtSupported
+    CallMgmtOverDci
+
+  ## Call Management Functional Descriptor
+  ## 
+  ## Ref: Universal Serial Bus Communications Class Subclass Specification for
+  ## PSTN Devices rev. 1.2
+  CdcCallMgmtDescriptor* {.packed.} = object
+    length: uint8
+    descriptorType: UsbDescriptorType
+    descriptorSubtype: CdcFunctionalDescriptorSubtype
+    capabilities: set[CallManagementCap]
+    dataInterface: InterfaceNumber
+
+  AbstractControlMgmtCap* {.pure, size: sizeof(cchar).} = enum
+    CommFeature
+    LineCodingState
+    SendBreak
+    NetworkConnection
+
+  ## Abstract Control Management Functional Descriptor
+  ## 
+  ## Ref: Universal Serial Bus Communications Class Subclass Specification for
+  ## PSTN Devices rev. 1.2
+  CdcAbstractControlMgmtDescriptor* {.packed.} = object
+    length: uint8
+    descriptorType: UsbDescriptorType
+    descriptorSubtype: CdcFunctionalDescriptorSubtype
+    capabilities: set[AbstractControlMgmtCap]
+
+  ## Complete interface descriptor structure for a CDC class "virtual USB
+  ## serial port" device. This includes the interface association (IAD),
+  ## the control and data interface descriptors, class-specific (CDC
+  ## Functional) descriptors and endpoint descriptors.
+  ## 
+  ## This should match the byte array produced by TinyUSB macro
+  ## `TUD_CDC_DESCRIPTOR`.
+  CompleteCdcSerialPortInterface* {.packed.} = object
+    iad: InterfaceAssociationDescriptor
+    controlItf: InterfaceDescriptor
+    cdcHeader: CdcHeaderDescriptor
+    cdcCallMgmt: CdcCallMgmtDescriptor
+    cdcAcm: CdcAbstractControlMgmtDescriptor
+    union: CdcUnionDescriptor[1]
+    epNotif: EndpointDescriptor
+    dataItf: InterfaceDescriptor
+    dataEpOut: EndpointDescriptor
+    dataEpIn: EndpointDescriptor
+
+
+static:
+  assert sizeof(CdcHeaderDescriptor) == 5
+  assert sizeof(CdcUnionDescriptor[4]) == 4 + 4
+  assert sizeof(CdcCallMgmtDescriptor) == 5
+  assert sizeof(CdcAbstractControlMgmtDescriptor) == 4
+  assert sizeof(CompleteCdcSerialPortInterface) == 66
+
+const
+  ## Version of CDC spec on which this code is based.
+  CdcSpecVersion* = initBcdVersion(1, 2, 0)
+
+  CdcCsHeader* =  CdcHeaderDescriptor(
+    length: sizeof(CdcHeaderDescriptor).uint8,
+    descriptorType: UsbDescriptorType.CsInterface,
+    descriptorSubtype: CdcFunctionalDescriptorSubtype.Header,
+    cdcVersion: CdcSpecVersion
+  )
