@@ -177,7 +177,7 @@ type
   ## Union Interface Functional Descriptor
   ## 
   ## N is the number of subordinate interfaces
-  CdcUnionDescriptor*[N: Positive] {.packed.} = object
+  CdcUnionDescriptor*[N: static int] {.packed.} = object
     length: uint8
     descriptorType: UsbDescriptorType
     descriptorSubtype: CdcFunctionalDescriptorSubtype

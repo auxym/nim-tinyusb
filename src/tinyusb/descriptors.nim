@@ -301,7 +301,7 @@ proc initStringDesc0*[N](langs: openArray[LangId],
     )
 
   dest[0] = descLen.uint8
-  dest[1] = UsbDescriptorType.DtString.ord
+  dest[1] = UsbDescriptorType.String.ord
   copyMem(dest[2].addr, langs[0].unsafeAddr, (descLen - 2))
 
 func initStringDesc*[N](str: string, dest: var array[N, uint8]) =
@@ -320,7 +320,7 @@ func initStringDesc*[N](str: string, dest: var array[N, uint8]) =
     )
 
   dest[0] = descLen.uint8
-  dest[1] = UsbDescriptorType.DtString.ord
+  dest[1] = UsbDescriptorType.String.ord
   copyMem(dest[2].addr, utf16str[0].unsafeAddr, (descLen - 2))
 
 func getUtf8String*(strDesc: openArray[uint8]): string =

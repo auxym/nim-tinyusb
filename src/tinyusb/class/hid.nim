@@ -1,5 +1,3 @@
-import ../device
-
 # HID Device API
 
 type KeyboardKeypress* {.size: 1.} = enum
