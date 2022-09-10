@@ -2,6 +2,8 @@ import tinyusb/descriptors
 import tinyusb/device
 import tinyusb/langids
 import tinyusb/config
+import tinyusb/serialize
+
 import tinyusb/class/hid
 import tinyusb/class/cdc
 import tinyusb/class/misc
@@ -10,6 +12,8 @@ export descriptors
 export device
 export langids
 export config
+export serialize
+
 export hid
 export cdc
 export misc
