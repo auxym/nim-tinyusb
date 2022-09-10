@@ -15,7 +15,7 @@ proc serialize(b: var string, x: uint32) =
   b.add ((0x00FF0000'u32 and x) shr 0o20).char
   b.add ((0xFF000000'u32 and x) shr 0o30).char
 
-proc serialize[T](b: var string, x: set[T]) =
+proc serialize*[T](b: var string, x: set[T]) =
   when sizeof(set[T]) == 1:
     b.serialize(cast[uint8](x))
   elif sizeof(set[T]) == 2:
