@@ -17,8 +17,8 @@ suite "Descriptors":
 
   test "EndpointAddress":
     check:
-      initEndpointAddress(0b1010, EpDirection.In).uint8 == 0b1_000_1010
-      initEndpointAddress(0b0101, EpDirection.Out).uint8 == 0b0_000_0101
+      initEpAddress(0b1010, EpDirection.In).uint8 == 0b1_000_1010
+      initEpAddress(0b0101, EpDirection.Out).uint8 == 0b0_000_0101
 
   test "EndpointAttributes":
     check:
