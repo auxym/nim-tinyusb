@@ -95,11 +95,6 @@ type
     Feedback = 0b01
     Implicit = 0b10
 
-  AdditionalTransactions* {.pure.} = enum
-    None = 0b00
-    add1 = 0b01
-    add2 = 0b10
-
   EpAddress* = distinct uint8
 
   EpAttributes* = distinct uint8
@@ -124,11 +119,9 @@ func initEndpointAttributes*(xfer: TransferType,
       val = val or (sync.ord.uint8 shl 2) or (usage.ord.uint8 shl 4)
   result = EpAttributes val
 
-func initEndpointDescMaxPacketSize*(
-    size: 0..2047,
-    addTransactions: AdditionalTransactions = AdditionalTransactions.None):
+func initEndpointDescMaxPacketSize*(size: 0..2047, addTransactions: 0..2 = 0):
     EpMaxPacketSize =
-  EpMaxPacketSize (size or (addTransactions.uint8.ord shl 11))
+  EpMaxPacketSize size.uint8 or (addTransactions.uint8 shl 11)
 
 func initConfigAttributes*(remoteWakeup: bool = false,
                            selfPowered: bool = false):
@@ -264,6 +257,21 @@ func initInterfaceDescriptor*(number: InterfaceNumber, alt: uint8, numEp: 1..255
     subclass: subclass,
     protocol: protocol,
     str: str
+  )
+
+func initEndpointDescriptor*(num: 0..15, dir: EpDirection, xfer: TransferType,
+                            maxPacketSize: 0..2047, interval: uint8,
+                            addTransactions: 0..2 = 0,
+                            sync: IsoSyncType = IsoSyncType.None,
+                            usage: IsoUsageType = IsoUsageType.Data
+                            ): EndpointDescriptor =
+  EndpointDescriptor(
+    length: sizeof(EndpointDescriptor).uint8,
+    descriptorType: UsbDescriptorType.Endpoint,
+    address: initEpAddress(num, dir),
+    attributes: initEndpointAttributes(xfer, sync, usage),
+    maxPacketSize: initEndpointDescMaxPacketSize(maxPacketSize, addTransactions),
+    interval: interval
   )
 
 func initInterfaceAssociationDescriptor*(first: InterfaceNumber, count: uint8,

@@ -165,6 +165,25 @@ const
   CdcProtocolAtCommandCdma*               = 0x06.UsbProtocolCode # AT Commands defined by TIA for CDMA
   CdcProtocolEthernetEmulationModel*      = 0x07.UsbProtocolCode # Ethernet Emulation Model
 
+# CDC Data class (0x0A) Subclass and Protocol codes
+const
+  CdcDataSubclassNone* = 0x00.UsbSubclassCode
+
+  CdcDataProtocolNetworkTransferBlock* = 0x01.UsbProtocolCode
+  CdcDataProtocolI430*                 = 0x30.UsbProtocolCode
+  CdcDataProtocolHdlc*                 = 0x31.UsbProtocolCode
+  CdcDataProtocolTransparent*          = 0x32.UsbProtocolCode
+  CdcDataProtocolQ921m*                = 0x50.UsbProtocolCode
+  CdcDataProtocolQ921*                 = 0x51.UsbProtocolCode
+  CdcDataProtocolQ921TM*               = 0x52.UsbProtocolCode
+  CdcDataProtocolV42bis*               = 0x90.UsbProtocolCode
+  CdcDataProtocolQ931Euro*             = 0x91.UsbProtocolCode
+  CdcDataProtocolV120*                 = 0x92.UsbProtocolCode
+  CdcDataProtocolCapi20*               = 0x93.UsbProtocolCode
+  CdcDataProtocolHostBased*            = 0xFD.UsbProtocolCode
+  CdcDataProtocolUnitDesc*             = 0xFE.UsbProtocolCode
+  CdcDataProtocolVendorSpecific*       = 0xFF.UsbProtocolCode
+
 
 type
   CdcFunctionalDescriptorSubtype* {.pure, size: sizeof(cchar).} = enum
@@ -338,7 +357,7 @@ func initCompleteCdcSerialPortInterface*(
     epOut, epIn: EpAddress, epDataSize: 0..2047,
     str: StringIndex = StringIndexNone): CompleteCdcSerialPortInterface =
 
-  let dataItf = (controlItf.uint8 + 1).InterfaceNumber
+  let dataItfNum = (controlItf.uint8 + 1).InterfaceNumber
   result = CompleteCdcSerialPortInterface(
     
     iad: initInterfaceAssociationDescriptor(
@@ -361,10 +380,30 @@ func initCompleteCdcSerialPortInterface*(
 
     cdcHeader: CdcCsHeader,
 
-    cdcCallMgmt: initCdcCallMgmtInterfaceDescriptor(dataItf=dataItf),
+    cdcCallMgmt: initCdcCallMgmtInterfaceDescriptor(dataItf=dataItfNum),
     
     cdcAcm: initCdcAbstractControlMgmtDescriptor(lineCodingState=true),
 
-    union: initCdcUnionDescriptor(controlItf, [dataItf]),
+    union: initCdcUnionDescriptor(controlItf, [dataItfNum]),
 
+    epNotif: initEndpointDescriptor(
+      1, EpDirection.In, TransferType.Interrupt, 8, 16
+    ),
+
+    dataItf: initInterfaceDescriptor(
+      number=dataItfNum,
+      alt=0,
+      numEp=2,
+      class=UsbClass.CdcData,
+      subclass=CdcDataSubclassNone,
+      protocol=UsbProtocolNone
+    ),
+
+    dataEpOut: initEndpointDescriptor(
+      2, EpDirection.Out, TransferType.Bulk, 512, 0
+    ),
+
+    dataEpIn: initEndpointDescriptor(
+      2, EpDirection.In, TransferType.Bulk, 512, 0
+    )
   )
