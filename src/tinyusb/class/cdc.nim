@@ -134,7 +134,56 @@ proc flush*(itf: UsbSerialInterface) {.inline.} =
   ## Force sending any data remaining in transmit FIFO
   discard cdcWriteFlush(itf.uint8)
 
+
 # CDC-specific descriptors
+
+# CDC Subclass codes
+const
+  CdcSubclassDirectLineControlModel*      = 0x01.UsbSubclassCode  # Direct Line Control Model         [USBPSTN1.2]
+  CdcSubclassAbstractControlModel*        = 0x02.UsbSubclassCode  # Abstract Control Model            [USBPSTN1.2]
+  CdcSubclassTelephoneControlModel*       = 0x03.UsbSubclassCode  # Telephone Control Model           [USBPSTN1.2]
+  CdcSubclassMultichannelControlModel*    = 0x04.UsbSubclassCode  # Multi-Channel Control Model       [USBISDN1.2]
+  CdcSubclassCapiControlModel*            = 0x05.UsbSubclassCode  # CAPI Control Model                [USBISDN1.2]
+  CdcSubclassEthernetControlModel*        = 0x06.UsbSubclassCode  # Ethernet Networking Control Model [USBECM1.2]
+  CdcSubclassAtmNetworkingControlModel*   = 0x07.UsbSubclassCode  # ATM Networking Control Model      [USBATM1.2]
+  CdcSubclassWirelessHandsetControlModel* = 0x08.UsbSubclassCode  # Wireless Handset Control Model    [USBWMC1.1]
+  CdcSubclassDeviceManagement*            = 0x09.UsbSubclassCode  # Device Management                 [USBWMC1.1]
+  CdcSubclassMobileDirectLineModel*       = 0x0A.UsbSubclassCode  # Mobile Direct Line Model          [USBWMC1.1]
+  CdcSubclassObex*                        = 0x0B.UsbSubclassCode  # OBEX                              [USBWMC1.1]
+  CdcSubclassEthernetEmulation_model*     = 0x0C.UsbSubclassCode  # Ethernet Emulation Model          [USBEEM1.0]
+  CdcSubclassNetworkControlModel*         = 0x0D.UsbSubclassCode  # Network Control Model             [USBNCM1.0]
+
+
+# CDC Protocol codes
+const
+  CdcProtocolNone*                        = 0x00.UsbProtocolCode # No specific protocol
+  CdcProtocolAtCommand*                   = 0x01.UsbProtocolCode # AT Commands: V.250 etc
+  CdcProtocolAtCommandPcca101*            = 0x02.UsbProtocolCode # AT Commands defined by PCCA-101
+  CdcProtocolAtCommandPcca101Annex0*      = 0x03.UsbProtocolCode # AT Commands defined by PCCA-101 & Annex O
+  CdcProtocolAtCommandGsm707*             = 0x04.UsbProtocolCode # AT Commands defined by GSM 07.07
+  CdcProtocolAtCommand3gpp27007*          = 0x05.UsbProtocolCode # AT Commands defined by 3GPP 27.007
+  CdcProtocolAtCommandCdma*               = 0x06.UsbProtocolCode # AT Commands defined by TIA for CDMA
+  CdcProtocolEthernetEmulationModel*      = 0x07.UsbProtocolCode # Ethernet Emulation Model
+
+# CDC Data class (0x0A) Subclass and Protocol codes
+const
+  CdcDataSubclassNone* = 0x00.UsbSubclassCode
+
+  CdcDataProtocolNetworkTransferBlock* = 0x01.UsbProtocolCode
+  CdcDataProtocolI430*                 = 0x30.UsbProtocolCode
+  CdcDataProtocolHdlc*                 = 0x31.UsbProtocolCode
+  CdcDataProtocolTransparent*          = 0x32.UsbProtocolCode
+  CdcDataProtocolQ921m*                = 0x50.UsbProtocolCode
+  CdcDataProtocolQ921*                 = 0x51.UsbProtocolCode
+  CdcDataProtocolQ921TM*               = 0x52.UsbProtocolCode
+  CdcDataProtocolV42bis*               = 0x90.UsbProtocolCode
+  CdcDataProtocolQ931Euro*             = 0x91.UsbProtocolCode
+  CdcDataProtocolV120*                 = 0x92.UsbProtocolCode
+  CdcDataProtocolCapi20*               = 0x93.UsbProtocolCode
+  CdcDataProtocolHostBased*            = 0xFD.UsbProtocolCode
+  CdcDataProtocolUnitDesc*             = 0xFE.UsbProtocolCode
+  CdcDataProtocolVendorSpecific*       = 0xFF.UsbProtocolCode
+
 
 type
   CdcFunctionalDescriptorSubtype* {.pure, size: sizeof(cchar).} = enum
@@ -252,4 +301,108 @@ const
     descriptorType: UsbDescriptorType.CsInterface,
     descriptorSubtype: CdcFunctionalDescriptorSubtype.Header,
     cdcVersion: CdcSpecVersion
+  )
+
+# Initializer funcs for CDC descriptors
+
+func initCdcUnionDescriptor*[N: static int](
+    ctlItf: InterfaceNumber, subs: array[N, InterfaceNumber]
+    ): CdcUnionDescriptor[N] =
+  CdcUnionDescriptor[N](
+    length: sizeof(CdcUnionDescriptor[N]).uint8,
+    descriptorType: UsbDescriptorType.CsInterface,
+    descriptorSubtype: CdcFunctionalDescriptorSubtype.Union,
+    controlInterface: ctlItf,
+    subordinates: subs
+  )
+
+func initCdcCallMgmtInterfaceDescriptor*(
+    dataItf: InterfaceNumber, callMgmtSupported=false, callMgmtOverDci=false
+    ): CdcCallMgmtDescriptor =
+
+  let caps = block:
+    var s: set[CallManagementCap]
+    if callMgmtSupported: s.incl CallManagementCap.CallMgmtSupported
+    if callMgmtOverDci: s.incl CallManagementCap.CallMgmtOverDci
+    s
+
+  result = CdcCallMgmtDescriptor(
+    length: sizeof(CdcCallMgmtDescriptor).uint8,
+    descriptorType: UsbDescriptorType.CsInterface,
+    descriptorSubtype: CdcFunctionalDescriptorSubtype.CallManagement,
+    capabilities: caps,
+    dataInterface: dataItf
+  )
+
+func initCdcAbstractControlMgmtDescriptor*(
+  commFeature, lineCodingState, sendBreak, netConnection: bool = false 
+    ): CdcAbstractControlMgmtDescriptor =
+
+  var caps: set[AbstractControlMgmtCap]
+  if commFeature: caps.incl AbstractControlMgmtCap.CommFeature
+  if lineCodingState: caps.incl AbstractControlMgmtCap.LineCodingState
+  if sendBreak: caps.incl AbstractControlMgmtCap.SendBreak
+  if netConnection: caps.incl AbstractControlMgmtCap.NetworkConnection
+  
+  result = CdcAbstractControlMgmtDescriptor(
+    length: sizeof(CdcAbstractControlMgmtDescriptor).uint8,
+    descriptorType: UsbDescriptorType.CsInterface,
+    descriptorSubtype: CdcFunctionalDescriptorSubtype.AbstractControlManagement,
+    capabilities: caps
+  )
+
+func initCompleteCdcSerialPortInterface*(
+    controlItf: InterfaceNumber, controlEpNum: 0..15, epNotifSize: 0..2047,
+    dataEpNum: 0..15, epDataSize: 0..2047,
+    str: StringIndex = StringIndexNone): CompleteCdcSerialPortInterface =
+
+  let dataItfNum = (controlItf.uint8 + 1).InterfaceNumber
+  result = CompleteCdcSerialPortInterface(
+    
+    iad: initInterfaceAssociationDescriptor(
+      first=controlItf,
+      count=2,
+      class=UsbClass.Cdc,
+      subclass=CdcSubclassAbstractControlModel,
+      protocol=UsbProtocolNone,
+    ),
+
+    controlItf: initInterfaceDescriptor(
+      number=controlItf,
+      alt=0,
+      numEp=1,
+      class=UsbClass.Cdc,
+      subclass=CdcSubclassAbstractControlModel,
+      protocol=UsbProtocolNone,
+      str=str
+    ),
+
+    cdcHeader: CdcCsHeader,
+
+    cdcCallMgmt: initCdcCallMgmtInterfaceDescriptor(dataItf=dataItfNum),
+    
+    cdcAcm: initCdcAbstractControlMgmtDescriptor(lineCodingState=true),
+
+    union: initCdcUnionDescriptor(controlItf, [dataItfNum]),
+
+    epNotif: initEndpointDescriptor(
+      controlEpNum, EpDirection.In, TransferType.Interrupt, epNotifSize, 16
+    ),
+
+    dataItf: initInterfaceDescriptor(
+      number=dataItfNum,
+      alt=0,
+      numEp=2,
+      class=UsbClass.CdcData,
+      subclass=CdcDataSubclassNone,
+      protocol=UsbProtocolNone
+    ),
+
+    dataEpOut: initEndpointDescriptor(
+      dataEpNum, EpDirection.Out, TransferType.Bulk, epDataSize, 0
+    ),
+
+    dataEpIn: initEndpointDescriptor(
+      dataEpNum, EpDirection.In, TransferType.Bulk, epDataSize, 0
+    )
   )
