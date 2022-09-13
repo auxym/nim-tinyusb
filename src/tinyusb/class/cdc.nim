@@ -306,11 +306,10 @@ const
 # Initializer funcs for CDC descriptors
 
 func initCdcUnionDescriptor*[N: static int](
-    ctlItf: InterfaceNumber,
-    subs: array[N, InterfaceNumber]
+    ctlItf: InterfaceNumber, subs: array[N, InterfaceNumber]
     ): CdcUnionDescriptor[N] =
   CdcUnionDescriptor[N](
-    length: sizeof(CdcUnionDescriptor).uint8,
+    length: sizeof(CdcUnionDescriptor[N]).uint8,
     descriptorType: UsbDescriptorType.CsInterface,
     descriptorSubtype: CdcFunctionalDescriptorSubtype.Union,
     controlInterface: ctlItf,

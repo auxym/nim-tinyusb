@@ -13,10 +13,17 @@ const
 
 suite "Validate descriptors against TinyUSB macros":
   test "CDC inerface descriptor":
+    const desclen = sizeof(CompleteCdcSerialPortInterface)
     let
-      controlItf = 0.InterfaceNumber
       nimCdcDesc = initCompleteCdcSerialPortInterface(
-        0.InterfaceNumber, 1, 8, 2, 512, 4.StringIndex
+        0.InterfaceNumber, 1, 8, 2, 64, 4.StringIndex
       )
-      tusbCdcDesc {.importc: "desc_cdc_itf".}: array[sizeof(CompleteCdcSerialPortInterface), uint8]
-    echo tusbCdcDesc[0]
+      tusbCdcDesc {.importc: "desc_cdc_itf".}: array[desclen, uint8]
+
+    var nimCdcDescArr: array[desclen, uint8]
+    let s = serialize(nimCdcDesc)
+    for (i, c) in s.pairs:
+      nimCdcDescArr[i] = c.uint8
+
+    check:
+      tusbCdcDesc == nimCdcDescArr

@@ -25,6 +25,14 @@ proc serialize*[T](b: var string, x: set[T]) =
   else:
     {.error: "serialize not implement for set of size " & sizeof(set[T]).}
 
+proc serialize*[T: enum](b: var string, x: T) =
+  when sizeof(T) == 1:
+    b.serialize(x.ord.uint8)
+  elif sizeof(T) == 2:
+    b.serialize(x.ord.uint16)
+  elif sizeof(T) == 4:
+    b.serialize(x.ord.uint32)
+
 proc serialize*[N, T](b: var string, x: array[N, T]) =
   for e in x:
     b.serialize(e)

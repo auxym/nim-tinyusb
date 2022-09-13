@@ -1,5 +1,9 @@
+import std/macros
+import std/genasts
+
 import ./langids
 import encode # https://github.com/treeform/encode
+import serialize
 
 type
   UsbSubclassCode* = distinct uint8
@@ -9,6 +13,9 @@ type
   StringIndex* = distinct uint8
   
   InterfaceNumber* = distinct uint8
+
+  # Binary-Coded Decimal major/minor version used in USB descriptors
+  BcdVersion* = distinct uint16
 
   UsbClass* {.size: sizeof(cchar), pure.} = enum
     Unspecified = 0 # Use when the class is defined by the interface descriptor(s)
@@ -54,9 +61,6 @@ type
     CsEndPoint = 0x25
     SuperSpeedEndpointComp = 0x30
     SuperSpeedIsoEndpointComp = 0x31
-
-  # Binary-Coded Decimal major/minor version used in USB descriptors
-  BcdVersion* = distinct uint16
 
   Ep0MaxPacketSize* {.size: sizeof(cchar), pure} = enum
     Size8 = 8
@@ -138,9 +142,8 @@ const
   UsbProtocolNone* = 0.UsbProtocolCode
   UsbProtocolVendorSpecific* = 0xFF.UsbProtocolCode
 
-{.push header: "tusb.h".}
 type
-  DeviceDescriptor* {.packed, importc: "tusb_desc_device_t", completeStruct.} = object
+  DeviceDescriptor* {.packed.} = object
     length*: uint8
     descriptorType*: UsbDescriptorType
     usbVersion*: BcdVersion
@@ -156,7 +159,7 @@ type
     serialNumberStr*: StringIndex
     numConfigurations*: uint8
 
-  ConfigurationDescriptor* {.packed, importc: "tusb_desc_configuration_t", completeStruct.} = object
+  ConfigurationDescriptor* {.packed.} = object
     length*: uint8
     descriptorType*: UsbDescriptorType
     totalLength*: uint16
@@ -166,7 +169,7 @@ type
     attributes*: set[ConfigurationAttribute]
     maxPower*: uint8 # Each increment is 2 mA
 
-  InterfaceDescriptor* {.packed, importc: "tusb_desc_interface_t", completeStruct.} = object
+  InterfaceDescriptor* {.packed.} = object
     length*: uint8
     descriptorType*: UsbDescriptorType
     number*: InterfaceNumber # zero-based index of this IF for the configuration
@@ -177,16 +180,14 @@ type
     protocol*: UsbProtocolCode
     str*: StringIndex
 
-  EndpointDescriptor* {.packed, importc: "tusb_desc_endpoint_t", completeStruct.} = object
+  EndpointDescriptor* {.packed.} = object
     length*: uint8
     descriptorType*: UsbDescriptorType
     address*: EpAddress
     attributes*: EpAttributes
     maxPacketSize*: EpMaxPacketSize
     interval: uint8
-{.pop.}
 
-type
   InterfaceAssociationDescriptor* {.packed.} = object
     length*: uint8
     descriptorType*: UsbDescriptorType
@@ -339,3 +340,19 @@ func getUtf8String*(strDesc: openArray[uint8]): string =
   copyMem(tmp[0].addr, strDesc[2].unsafeAddr, utf16len)
   result = fromUTF16LE tmp
 
+macro borrowSerialize(typs: untyped): untyped =
+  result = newStmtList()
+  for typ in typs.children:
+    let ast = genAst(typ):
+      proc serialize*(b: var string, e: typ) {.borrow.}
+    result.add ast
+
+borrowSerialize:
+  UsbSubclassCode
+  UsbProtocolCode
+  StringIndex
+  InterfaceNumber
+  BcdVersion
+  EpAddress
+  EpAttributes
+  EpMaxPacketSize
