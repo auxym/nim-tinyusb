@@ -263,7 +263,7 @@ func initInterfaceDescriptor*(number: InterfaceNumber, alt: uint8, numEp: 1..255
     str: str
   )
 
-func initEndpointDescriptor*(num: EpNum, dir: EpDirection, xfer: TransferType,
+func initEndpointDescriptor*(num: EpNumber, dir: EpDirection, xfer: TransferType,
                             maxPacketSize: EpSize, interval: uint8,
                             addTransactions: 0..2 = 0,
                             sync: IsoSyncType = IsoSyncType.None,
