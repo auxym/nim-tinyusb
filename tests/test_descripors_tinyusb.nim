@@ -12,6 +12,7 @@ const
 
 
 suite "Validate descriptors against TinyUSB macros":
+
   test "CDC inerface descriptor":
     const desclen = sizeof(CompleteCdcSerialPortInterface)
     let

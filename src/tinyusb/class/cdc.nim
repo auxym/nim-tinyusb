@@ -352,8 +352,8 @@ func initCdcAbstractControlMgmtDescriptor*(
   )
 
 func initCompleteCdcSerialPortInterface*(
-    controlItf: InterfaceNumber, controlEpNum: 0..15, epNotifSize: 0..2047,
-    dataEpNum: 0..15, epDataSize: 0..2047,
+    controlItf: InterfaceNumber, controlEpNum: EpNumber, epNotifSize: EpSize,
+    dataEpNum:EpNumber, epDataSize: EpSize,
     str: StringIndex = StringIndexNone): CompleteCdcSerialPortInterface =
 
   let dataItfNum = (controlItf.uint8 + 1).InterfaceNumber

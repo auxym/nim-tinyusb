@@ -1,5 +1,4 @@
 import std/macros
-import std/genasts
 
 import ./langids
 import encode # https://github.com/treeform/encode
@@ -99,6 +98,10 @@ type
     Feedback = 0b01
     Implicit = 0b10
 
+  EpNumber* = range[0..15]
+
+  EpSize* = range[0..2047]
+
   EpAddress* = distinct uint8
 
   EpAttributes* = distinct uint8
@@ -111,8 +114,8 @@ static:
 func initBcdVersion*(major: 0..255, minor: 0..15, sub: 0..15): BcdVersion =
   BcdVersion((major.uint16 shl 8) or (minor.uint16 shl 4) or sub.uint16)
 
-func initEpAddress*(epnum: 0..15, dir: EpDirection): EpAddress =
-  EpAddress epnum.ord.uint8 or (dir.ord.uint8 shl 7)
+func initEpAddress*(epnum: EpNumber, dir: EpDirection): EpAddress =
+  EpAddress epnum.uint8 or (dir.ord.uint8 shl 7)
 
 func initEndpointAttributes*(xfer: TransferType,
                              sync: IsoSyncType = IsoSyncType.None,
@@ -123,7 +126,7 @@ func initEndpointAttributes*(xfer: TransferType,
       val = val or (sync.ord.uint8 shl 2) or (usage.ord.uint8 shl 4)
   result = EpAttributes val
 
-func initEndpointDescMaxPacketSize*(size: 0..2047, addTransactions: 0..2 = 0):
+func initEndpointDescMaxPacketSize*(size: EpSize, addTransactions: 0..2 = 0):
     EpMaxPacketSize =
   EpMaxPacketSize size.uint8 or (addTransactions.uint8 shl 11)
 
@@ -260,8 +263,8 @@ func initInterfaceDescriptor*(number: InterfaceNumber, alt: uint8, numEp: 1..255
     str: str
   )
 
-func initEndpointDescriptor*(num: 0..15, dir: EpDirection, xfer: TransferType,
-                            maxPacketSize: 0..2047, interval: uint8,
+func initEndpointDescriptor*(num: EpNum, dir: EpDirection, xfer: TransferType,
+                            maxPacketSize: EpSize, interval: uint8,
                             addTransactions: 0..2 = 0,
                             sync: IsoSyncType = IsoSyncType.None,
                             usage: IsoUsageType = IsoUsageType.Data
@@ -340,12 +343,6 @@ func getUtf8String*(strDesc: openArray[uint8]): string =
   copyMem(tmp[0].addr, strDesc[2].unsafeAddr, utf16len)
   result = fromUTF16LE tmp
 
-macro borrowSerialize(typs: untyped): untyped =
-  result = newStmtList()
-  for typ in typs.children:
-    let ast = genAst(typ):
-      proc serialize*(b: var string, e: typ) {.borrow.}
-    result.add ast
 
 borrowSerialize:
   UsbSubclassCode
