@@ -1,3 +1,6 @@
+import ../descriptors
+import ../serialize
+
 # HID Device API
 
 type KeyboardKeypress* {.size: 1.} = enum
@@ -193,66 +196,53 @@ type MouseButton* {.pure, size: 1.} = enum
   ## Represents 5 standards buttons for HID mouse input reports
   left, right, middle, back, forward
 
+type
+  HidDescriptorType* {.pure.} = enum
+    Hid = 0x21, Report = 0x22, Physical = 0x23
+
+  HidCountryCode* {.pure.} = enum
+    NotSupported,
+    Arabic,
+    Belgian,
+    CanadianBilingual,
+    CanadianFrench,
+    CzechRepublic,
+    Dannish,
+    Finnish,
+    French,
+    German,
+    Greek,
+    Hebrew,
+    Hungary,
+    International,
+    Italian,
+    JapanKatakana
+    Korean,
+    LatinAmerican,
+    NetherlandsDutch,
+    Norwegian,
+    PersianFarsi,
+    Poland,
+    Portuguese,
+    Russia,
+    Slovakia,
+    Spanish,
+    Sweedish,
+    SwissFrench,
+    SwissGerman,
+    Switzerland,
+    Taiwan,
+    TurkishQ,
+    UK,
+    US,
+    Yugoslavia,
+    Turkish_f
+
 {.push header: "tusb.h".}
 type
   HidReportType* {.pure, importC: "hid_report_type_t".} = enum
     ## HID Request Report Type
-    invalid, input, output, feature
-
-  HidProtocol* {.pure, importC: "hid_protocol_type_t".} = enum
-    none, mouse, keyboard
-
-  HidSubClass* {.pure, importC: "hid_subclass_type_t".} = enum
-    none, boot
-
-  HidDescriptorType* {.pure, importC: "hid_descriptor_type_t".} = enum
-    hid = 0x21, report = 0x22, physical = 0x23
-
-  HidRequestType* {.pure, importC: "hid_request_type_t".} = enum
-    getReport = 0x01,
-    getIdle = 0x02,
-    getProtocol = 0x03,
-    setReport = 0x09,
-    setIdle = 0x0a,
-    setProtocol = 0x0b
-
-  HidCountryCode* {.pure, importC: "hid_country_code_t".} = enum
-    notSupported,
-    arabic,
-    belgian,
-    canadianBilingual,
-    canadianFrench,
-    czechRepublic,
-    dannish,
-    finnish,
-    french,
-    german,
-    greek,
-    hebrew,
-    hungary,
-    international,
-    italian,
-    japanKatakana
-    korean,
-    latinAmerican,
-    netherlandsDutch,
-    norwegian,
-    persianFarsi,
-    poland,
-    portuguese,
-    russia,
-    slovakia,
-    spanish,
-    sweedish,
-    swissFrench,
-    swissGerman,
-    switzerland,
-    taiwan,
-    turkishQ,
-    uk,
-    us,
-    yugoslavia,
-    turkish_f
+    Invalid, Input, Output, Feature
 
   MouseReport* {.packed, importC: "hid_mouse_report_t".} = object
     buttons*: set[MouseButton]
@@ -267,21 +257,26 @@ type
 static:
   assert sizeof(set[KeyModifier]) == 1
 
-type UsbHidInterface* = distinct range[0'u8 .. uint8.high]
+type HidInterface* = distinct uint8
 ## Used to represent the HID interface number, as configured by `CFG_TUD_HID`.
-## Eg. if `CFG_TUD_HID` is `1`, then only `0.UsbHidInterface` would be valid.
-## If `CFG_TUD_HID` is `2`, then we could use `0.UsbHidInterface` and
-## `1.UsbHidInterface`.
+## Eg. if `CFG_TUD_HID` is `1`, then only `0.HidInterface` would be valid.
+## If `CFG_TUD_HID` is `2`, then we could use `0.HidInterface` and
+## `1.HidInterface`.
 ##
 ## Note: A single HID interface can send multiple report types, eg, keyboard
 ## and mouse. See the `id` parameter in the HID API procs for the report id.
 
+converter toInterfaceNumber*(h: HidInterface): InterfaceNumber =
+  h.uint8.InterfaceNumber
+
+borrowSerialize: HidInterface
+
 {.push header: "tusb.h".}
 
-proc ready*(itf: UsbHidInterface): bool {.importC: "tud_hid_n_ready".}
+proc ready*(itf: HidInterface): bool {.importC: "tud_hid_n_ready".}
   ## Check if the interface is ready to use
 
-proc sendReport*(itf: UsbHidInterface, id: byte, report: pointer, len: byte):
+proc sendReport*(itf: HidInterface, id: byte, report: pointer, len: byte):
     bool {.importc: "tud_hid_n_report".}
   ## Send input report to host.
   ##
@@ -294,10 +289,10 @@ proc sendReport*(itf: UsbHidInterface, id: byte, report: pointer, len: byte):
   ##             conform to the report descriptor)
   ## **len**     Report data array length
 
-proc sendKeyboardReport(itf: UsbHidInterface, id: byte, modifier: uint8,
+proc sendKeyboardReport(itf: HidInterface, id: byte, modifier: uint8,
     keycode: ptr uint8): bool {.importc: "tud_hid_n_keyboard_report".}
 
-proc sendMouseReport*(itf: UsbHidInterface, id: byte,
+proc sendMouseReport*(itf: HidInterface, id: byte,
     buttons: set[MouseButton], x, y, vertical, horizontal: int8): bool
     {.importc: "tud_hid_n_mouse_report".}
   ## Convenient helper to send mouse report if application
@@ -313,7 +308,7 @@ proc sendMouseReport*(itf: UsbHidInterface, id: byte,
   ## **horizontal, vertical**    Relative horizontal and vertical scroll since
   ##                             previous report.
 
-proc sendGamepadReport*(itf: UsbHidInterface, id: uint8,
+proc sendGamepadReport*(itf: HidInterface, id: uint8,
     x, y, z, rz, rx, ry: int8, hat: GamepadHatPosition,
     buttons: set[GamepadButton]): bool
     {.importc: "tud_hid_n_gamepad_report".}
@@ -330,7 +325,7 @@ proc sendGamepadReport*(itf: UsbHidInterface, id: uint8,
   ## **hat**      Position of gamepad hat or D-Pad
 {.pop}
 
-proc sendMouseReport*(itf: UsbHidInterface, id: byte, report: MouseReport): bool =
+proc sendMouseReport*(itf: HidInterface, id: byte, report: MouseReport): bool =
   ## Convenient helper to send mouse report if application
   ## use template layout report as defined by hid_mouse_report_t
   ## **Parameters:**
@@ -341,7 +336,7 @@ proc sendMouseReport*(itf: UsbHidInterface, id: byte, report: MouseReport): bool
   ## **report**                  `MouseReport` object to send.
   sendReport(itf, id, report.unsafeAddr, sizeof(MouseReport).uint8)
 
-proc sendKeyboardReport*(itf: UsbHidInterface, id: byte, modifiers: set[KeyModifier],
+proc sendKeyboardReport*(itf: HidInterface, id: byte, modifiers: set[KeyModifier],
     key0, key1, key2, key3, key4, key5: KeyboardKeypress = keyNone): bool =
   ## Convenient helper to send keyboard report if application
   ## uses template layout report as defined by hid_keyboard_report_t
@@ -355,7 +350,7 @@ proc sendKeyboardReport*(itf: UsbHidInterface, id: byte, modifiers: set[KeyModif
   let keyArr = [key0, key1, key2, key3, key4, key5]
   result = sendKeyboardReport(itf, id, cast[uint8](modifiers), cast[ptr uint8](keyArr.unsafeAddr))
 
-proc sendKeyboardReport*(itf: UsbHidInterface, id: byte, modifiers: set[KeyModifier],
+proc sendKeyboardReport*(itf: HidInterface, id: byte, modifiers: set[KeyModifier],
     keys: array[6, KeyboardKeypress]): bool =
   ## Convenient helper to send keyboard report if application
   ## uses template layout report as defined by hid_keyboard_report_t
@@ -369,7 +364,7 @@ proc sendKeyboardReport*(itf: UsbHidInterface, id: byte, modifiers: set[KeyModif
   var k = keys
   result = sendKeyboardReport(itf, id, cast[uint8](modifiers), cast[ptr uint8](k[0].addr))
 
-proc sendKeyboardReport*(itf: UsbHidInterface, id: byte, report: KeyboardReport): bool =
+proc sendKeyboardReport*(itf: HidInterface, id: byte, report: KeyboardReport): bool =
   ## Convenient helper to send keyboard report if application
   ## uses template layout report as defined by hid_keyboard_report_t
   ##
@@ -441,3 +436,85 @@ template hidDescriptorReportCallback*(body) =
   proc tudDescriptorReportCb: ptr uint8 {.exportC: "tud_hid_descriptor_report_cb",
       codegendecl: "uint8_t const * $2$3".} =
     body
+
+# HID class-specific Descriptors
+
+# Class and subclass codes used in HID interface descriptors
+const
+    HidSubclassNone* = 0.UsbSubclassCode
+    HidSubclassBoot* = 1.UsbSubclassCode
+
+    HidProtocolMouse* = 1.UsbProtocolCode
+    HidProtocolKeyboard* = 2.UsbProtocolCode
+
+type
+  HidBootProtocol* {.pure, size: 1} = enum
+    None, Mouse, Keyboard
+
+  HidDescriptor* {.packed.} = object
+    length*: uint8
+    descriptorType*: HidDescriptorType
+    hidVersion*: BcdVersion
+    country*: HidCountryCode
+    numDescriptors*: uint8
+    reportDescriptorType*: HidDescriptorType
+    reportDescriptorLength*: uint16
+
+  ## Equivalent to descriptor returned by TinyUSB macro `TUD_HID_DESCRIPTOR`
+  CompleteHidInterfaceDescriptor* {.packed.} = object
+    itf*: InterfaceDescriptor
+    hid*: HidDescriptor
+    ep*: EndpointDescriptor
+
+static:
+  assert sizeof(HidDescriptor) == 9
+  assert sizeof(CompleteHidInterfaceDescriptor) == 25
+
+# This module is based on HID spec 1.11
+const HidVer = initBcdVersion(1, 11, 0)
+
+func initHidDescriptor*(numDesc: uint8, reportDescType: HidDescriptorType,
+                       reportDescLen: uint16, hidVersion=HidVer,
+                       country=HidCountryCode.NotSupported): HidDescriptor =
+  result = HidDescriptor(
+    length: sizeof(HidDescriptor).uint8,
+    descriptorType: HidDescriptorType.Hid,
+    hidVersion: hidVersion,
+    country: country,
+    numDescriptors: numDesc,
+    reportDescriptorType: reportDescType,
+    reportDescriptorLength: reportDescLen
+  )
+
+func initCompleteHidInterface*(itf: InterfaceNumber, reportDescLen: uint16,
+                               epIn: EpNumber, epInSize: EpSize,
+                               epInterval: uint8,
+                               bootProtocol: HidBootProtocol = HidBootProtocol.None, 
+                               str: StringIndex = StringIndexNone
+                               ): CompleteHidInterfaceDescriptor =
+  let sub = block:
+    if bootProtocol == HidBootProtocol.None:
+      HidSubclassNone
+    else:
+      HidSubclassBoot
+  let bProto = bootProtocol.ord.UsbProtocolCode
+
+  result = CompleteHidInterfaceDescriptor(
+
+    itf: initInterfaceDescriptor(
+      number=itf, alt=0, numEp=1, class=UsbClass.Hid, subclass=sub,
+      protocol=bProto, str=str
+    ),
+
+    hid: initHidDescriptor(
+      numDesc=1,
+      reportDescType=HidDescriptorType.Report,
+      reportDescLen=reportDescLen
+    ),
+
+    ep: initEndpointDescriptor(
+      num=epIn, dir=EpDirection.In, xfer=TransferType.Interrupt,
+      maxPacketSize=epInSize, interval=epInterval
+    )
+
+  )
