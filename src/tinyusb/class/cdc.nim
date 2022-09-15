@@ -218,20 +218,20 @@ type
 
   ## Header Functional Descriptor
   CdcHeaderDescriptor* {.packed.} = object
-    length: uint8
-    descriptorType: UsbDescriptorType
-    descriptorSubtype: CdcFunctionalDescriptorSubtype
-    cdcVersion: BcdVersion
+    length*: uint8
+    descriptorType*: UsbDescriptorType
+    descriptorSubtype*: CdcFunctionalDescriptorSubtype
+    cdcVersion*: BcdVersion
 
   ## Union Interface Functional Descriptor
   ## 
   ## N is the number of subordinate interfaces
   CdcUnionDescriptor*[N: static int] {.packed.} = object
-    length: uint8
-    descriptorType: UsbDescriptorType
-    descriptorSubtype: CdcFunctionalDescriptorSubtype
-    controlInterface: InterfaceNumber
-    subordinates: array[N, InterfaceNumber]
+    length*: uint8
+    descriptorType*: UsbDescriptorType
+    descriptorSubtype*: CdcFunctionalDescriptorSubtype
+    controlInterface*: InterfaceNumber
+    subordinates*: array[N, InterfaceNumber]
 
   ## Call management capabilities bitset
   CallManagementCap* {.pure, size: sizeof(cchar).} = enum
@@ -243,11 +243,11 @@ type
   ## Ref: Universal Serial Bus Communications Class Subclass Specification for
   ## PSTN Devices rev. 1.2
   CdcCallMgmtDescriptor* {.packed.} = object
-    length: uint8
-    descriptorType: UsbDescriptorType
-    descriptorSubtype: CdcFunctionalDescriptorSubtype
-    capabilities: set[CallManagementCap]
-    dataInterface: InterfaceNumber
+    length*: uint8
+    descriptorType*: UsbDescriptorType
+    descriptorSubtype*: CdcFunctionalDescriptorSubtype
+    capabilities*: set[CallManagementCap]
+    dataInterface*: InterfaceNumber
 
   AbstractControlMgmtCap* {.pure, size: sizeof(cchar).} = enum
     CommFeature
@@ -260,10 +260,10 @@ type
   ## Ref: Universal Serial Bus Communications Class Subclass Specification for
   ## PSTN Devices rev. 1.2
   CdcAbstractControlMgmtDescriptor* {.packed.} = object
-    length: uint8
-    descriptorType: UsbDescriptorType
-    descriptorSubtype: CdcFunctionalDescriptorSubtype
-    capabilities: set[AbstractControlMgmtCap]
+    length*: uint8
+    descriptorType*: UsbDescriptorType
+    descriptorSubtype*: CdcFunctionalDescriptorSubtype
+    capabilities*: set[AbstractControlMgmtCap]
 
   ## Complete interface descriptor structure for a CDC class "virtual USB
   ## serial port" device. This includes the interface association (IAD),
@@ -273,16 +273,16 @@ type
   ## This should match the byte array produced by TinyUSB macro
   ## `TUD_CDC_DESCRIPTOR`.
   CompleteCdcSerialPortInterface* {.packed.} = object
-    iad: InterfaceAssociationDescriptor
-    controlItf: InterfaceDescriptor
-    cdcHeader: CdcHeaderDescriptor
-    cdcCallMgmt: CdcCallMgmtDescriptor
-    cdcAcm: CdcAbstractControlMgmtDescriptor
-    union: CdcUnionDescriptor[1]
-    epNotif: EndpointDescriptor
-    dataItf: InterfaceDescriptor
-    dataEpOut: EndpointDescriptor
-    dataEpIn: EndpointDescriptor
+    iad*: InterfaceAssociationDescriptor
+    controlItf*: InterfaceDescriptor
+    cdcHeader*: CdcHeaderDescriptor
+    cdcCallMgmt*: CdcCallMgmtDescriptor
+    cdcAcm*: CdcAbstractControlMgmtDescriptor
+    union*: CdcUnionDescriptor[1]
+    epNotif*: EndpointDescriptor
+    dataItf*: InterfaceDescriptor
+    dataEpOut*: EndpointDescriptor
+    dataEpIn*: EndpointDescriptor
 
 
 static:
