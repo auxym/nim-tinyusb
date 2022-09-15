@@ -46,6 +46,8 @@ uint8_t const desc_hid_report[] =
   TUD_HID_REPORT_DESC_GAMEPAD ( HID_REPORT_ID(REPORT_ID_GAMEPAD          ))
 };
 
+uint16_t const desc_hid_report_size = sizeof(desc_hid_report);
+
 //--------------------------------------------------------------------+
 // Configuration Descriptor
 //--------------------------------------------------------------------+
@@ -80,4 +82,10 @@ uint8_t const desc_cdc_itf[] =
 {
   // 1st CDC: Interface number, string index, EP notification address and size, EP data address (out, in) and size.
   TUD_CDC_DESCRIPTOR(ITF_NUM_CDC_0, 4, EPNUM_CDC_0_NOTIF, 8, EPNUM_CDC_0_OUT, EPNUM_CDC_0_IN, 64),
+};
+
+uint8_t const desc_hid_itf[] =
+{
+  // HID: Interface number, string index, protocol, report descriptor len, EP In address, size & polling interval
+  TUD_HID_DESCRIPTOR(ITF_NUM_HID, 5, HID_ITF_PROTOCOL_NONE, sizeof(desc_hid_report), EPNUM_HID, CFG_TUD_HID_EP_BUFSIZE, 5)
 };

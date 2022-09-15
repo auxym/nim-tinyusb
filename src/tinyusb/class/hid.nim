@@ -201,12 +201,6 @@ type
     ## HID Request Report Type
     Invalid, Input, Output, Feature
 
-  HidProtocol* {.pure, importC: "hid_protocol_type_t".} = enum
-    None, Mouse, Keyboard
-
-  HidSubClass* {.pure, importC: "hid_subclass_type_t".} = enum
-    None, Boot
-
   HidDescriptorType* {.pure, importC: "hid_descriptor_type_t".} = enum
     Hid = 0x21, Report = 0x22, Physical = 0x23
 
@@ -277,6 +271,9 @@ type HidInterface* = distinct uint8
 ##
 ## Note: A single HID interface can send multiple report types, eg, keyboard
 ## and mouse. See the `id` parameter in the HID API procs for the report id.
+
+converter toInterfaceNumber*(h: HidInterface): InterfaceNumber =
+  h.uint8.InterfaceNumber
 
 {.push header: "tusb.h".}
 
@@ -446,7 +443,18 @@ template hidDescriptorReportCallback*(body) =
 
 # HID class-specific Descriptors
 
+# Class and subclass codes used in HID interface descriptors
+const
+    HidSubclassNone* = 0.UsbSubclassCode
+    HidSubclassBoot* = 1.UsbSubclassCode
+
+    HidProtocolMouse* = 1.UsbProtocolCode
+    HidProtocolKeyboard* = 2.UsbProtocolCode
+
 type
+  HidBootProtocol* {.pure, size: 1} = enum
+    None, Mouse, Keyboard
+
   HidDescriptor* {.packed.} = object
     length: uint8
     descriptorType: HidDescriptorType
@@ -454,7 +462,7 @@ type
     country: HidCountryCode
     numDescriptors: uint8
     reportDescriptorType: HidDescriptorType
-    reportDescriptorLength: uint8
+    reportDescriptorLength: uint16
 
   ## Equivalent to descriptor returned by TinyUSB macro `TUD_HID_DESCRIPTOR`
   CompleteHidInterfaceDescriptor* {.packed.} = object
@@ -462,20 +470,55 @@ type
     hid: HidDescriptor
     ep: EndpointDescriptor
 
+static:
+  assert sizeof(HidDescriptor) == 9
+  assert sizeof(CompleteHidInterfaceDescriptor) == 25
 
-func initHidDescriptor*(numDesc:uint8, reportDescType: HidDescriptorType,
-                       reportDescLen: uint8, hidVersion=0x01B0.BcdVersion,
+# This module is based on HID spec 1.11
+const HidVer = initBcdVersion(1, 11, 0)
+
+func initHidDescriptor*(numDesc: uint8, reportDescType: HidDescriptorType,
+                       reportDescLen: uint16, hidVersion=HidVer,
                        country=HidCountryCode.NotSupported): HidDescriptor =
   result = HidDescriptor(
     length: sizeof(HidDescriptor).uint8,
     descriptorType: HidDescriptorType.Hid,
-    hidVersion: initBcdVersion(1, 11, 0),
+    hidVersion: hidVersion,
     country: country,
     numDescriptors: numDesc,
     reportDescriptorType: reportDescType,
     reportDescriptorLength: reportDescLen
   )
 
-func initCompleteHidInterface(itf: HidInterface, reportDescLen: int, epin: 0..15
-                              boot=false, 
-                              str: StringIndex = StringIndexNone)
+func initCompleteHidInterface*(itf: InterfaceNumber, reportDescLen: uint16,
+                               epIn: EpNumber, epInSize: EpSize,
+                               epInterval: uint8,
+                               bootProtocol: HidBootProtocol = HidBootProtocol.None, 
+                               str: StringIndex = StringIndexNone
+                               ): CompleteHidInterfaceDescriptor =
+  let sub = block:
+    if bootProtocol == HidBootProtocol.None:
+      HidSubclassBoot
+    else:
+      HidSubclassNone
+  let bProto = bootProtocol.ord.UsbProtocolCode
+
+  result = CompleteHidInterfaceDescriptor(
+
+    itf: initInterfaceDescriptor(
+      number=itf, alt=0, numEp=1, class=UsbClass.Hid, subclass=sub,
+      protocol=bProto, str=str
+    ),
+
+    hid: initHidDescriptor(
+      numDesc=1,
+      reportDescType=HidDescriptorType.Report,
+      reportDescLen=reportDescLen
+    ),
+
+    ep: initEndpointDescriptor(
+      num=epIn, dir=EpDirection.In, xfer=TransferType.Interrupt,
+      maxPacketSize=epInSize, interval=epInterval
+    )
+
+  )
