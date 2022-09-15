@@ -452,19 +452,19 @@ type
     None, Mouse, Keyboard
 
   HidDescriptor* {.packed.} = object
-    length: uint8
-    descriptorType: HidDescriptorType
-    hidVersion: BcdVersion
-    country: HidCountryCode
-    numDescriptors: uint8
-    reportDescriptorType: HidDescriptorType
-    reportDescriptorLength: uint16
+    length*: uint8
+    descriptorType*: HidDescriptorType
+    hidVersion*: BcdVersion
+    country*: HidCountryCode
+    numDescriptors*: uint8
+    reportDescriptorType*: HidDescriptorType
+    reportDescriptorLength*: uint16
 
   ## Equivalent to descriptor returned by TinyUSB macro `TUD_HID_DESCRIPTOR`
   CompleteHidInterfaceDescriptor* {.packed.} = object
-    itf: InterfaceDescriptor
-    hid: HidDescriptor
-    ep: EndpointDescriptor
+    itf*: InterfaceDescriptor
+    hid*: HidDescriptor
+    ep*: EndpointDescriptor
 
 static:
   assert sizeof(HidDescriptor) == 9
@@ -494,9 +494,9 @@ func initCompleteHidInterface*(itf: InterfaceNumber, reportDescLen: uint16,
                                ): CompleteHidInterfaceDescriptor =
   let sub = block:
     if bootProtocol == HidBootProtocol.None:
-      HidSubclassBoot
-    else:
       HidSubclassNone
+    else:
+      HidSubclassBoot
   let bProto = bootProtocol.ord.UsbProtocolCode
 
   result = CompleteHidInterfaceDescriptor(

@@ -12,6 +12,11 @@ const
 {.passc: fmt"-I{TinyUsbSrc}".}
 {.compile: "usb_descriptors.c".}
 
+template toByteArray(sz: static[int], str: string): auto =
+  var arr: array[sz, uint8]
+  for (i, ch) in str.pairs:
+    arr[i] = ch.uint8
+  arr
 
 suite "Validate descriptors against TinyUSB macros":
 
@@ -23,12 +28,10 @@ suite "Validate descriptors against TinyUSB macros":
       )
       tusbCdcDesc {.importc: "desc_cdc_itf".}: array[desclen, uint8]
 
-    var nimCdcDescArr: array[desclen, uint8]
-    let s = serialize(nimCdcDesc)
-    for (i, c) in s.pairs:
-      nimCdcDescArr[i] = c.uint8
+    let nimCdcDescArr = toByteArray(desclen, nimCdcDesc.serialize())
 
     check:
+      nimCdcDesc.serialize.len == desclen
       tusbCdcDesc == nimCdcDescArr
 
   test "HID interface descriptor":
@@ -41,3 +44,11 @@ suite "Validate descriptors against TinyUSB macros":
     var nimDesc = initCompleteHidInterface(
       2.InterfaceNumber, tusbReportDescLen, 3, 16, 5, str=5.StringIndex
     )
+    nimDesc.hid.hidVersion = initBcdVersion(1, 1, 1)
+
+    let nimDescBytes = toByteArray(desclen, nimDesc.serialize)
+    #echo "nim  ", nimDescBytes
+    #echo "tusb ", tusbDesc
+    check:
+      nimDesc.serialize.len == desclen
+      nimDescBytes == tusbDesc
