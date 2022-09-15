@@ -1,5 +1,5 @@
 import ../descriptors
-import ../serialize
+import ../internal
 
 # HID Device API
 

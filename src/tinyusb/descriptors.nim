@@ -2,7 +2,7 @@ import std/macros
 
 import ./langids
 import encode # https://github.com/treeform/encode
-import serialize
+import ./internal
 
 type
   UsbSubclassCode* = distinct uint8
