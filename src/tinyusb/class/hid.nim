@@ -1,4 +1,5 @@
 import ../descriptors
+import ../serialize
 
 # HID Device API
 
@@ -195,24 +196,11 @@ type MouseButton* {.pure, size: 1.} = enum
   ## Represents 5 standards buttons for HID mouse input reports
   left, right, middle, back, forward
 
-{.push header: "tusb.h".}
 type
-  HidReportType* {.pure, importC: "hid_report_type_t".} = enum
-    ## HID Request Report Type
-    Invalid, Input, Output, Feature
-
-  HidDescriptorType* {.pure, importC: "hid_descriptor_type_t".} = enum
+  HidDescriptorType* {.pure.} = enum
     Hid = 0x21, Report = 0x22, Physical = 0x23
 
-  HidRequestType* {.pure, importC: "hid_request_type_t".} = enum
-    GetReport = 0x01,
-    GetIdle = 0x02,
-    GetProtocol = 0x03,
-    SetReport = 0x09,
-    SetIdle = 0x0a,
-    SetProtocol = 0x0b
-
-  HidCountryCode* {.pure, importC: "hid_country_code_t".} = enum
+  HidCountryCode* {.pure.} = enum
     NotSupported,
     Arabic,
     Belgian,
@@ -250,6 +238,12 @@ type
     Yugoslavia,
     Turkish_f
 
+{.push header: "tusb.h".}
+type
+  HidReportType* {.pure, importC: "hid_report_type_t".} = enum
+    ## HID Request Report Type
+    Invalid, Input, Output, Feature
+
   MouseReport* {.packed, importC: "hid_mouse_report_t".} = object
     buttons*: set[MouseButton]
     x*, y*, wheel*, pan*: int8
@@ -274,6 +268,8 @@ type HidInterface* = distinct uint8
 
 converter toInterfaceNumber*(h: HidInterface): InterfaceNumber =
   h.uint8.InterfaceNumber
+
+borrowSerialize: HidInterface
 
 {.push header: "tusb.h".}
 
