@@ -52,3 +52,31 @@ suite "Validate descriptors against TinyUSB macros":
     check:
       nimDesc.serialize.len == desclen
       nimDescBytes == tusbDesc
+
+  test "HID + CDC Configuration descriptor reply":
+    const desclen = sizeof(CompleteHidInterfaceDescriptor) +
+                    sizeof(CompleteCdcSerialPortInterface) +
+                    sizeof(ConfigurationDescriptor)
+
+    let
+      tusbDesc {.importc: "desc_fs_configuration".}: array[desclen, uint8]
+      tusbHidReportDescLen {.importc: "desc_hid_report_size".}: uint16
+
+      cfgDesc = initConfigurationDescriptor(
+        val=1, totalLength=desclen, numItf=3, powerma=100,
+      )
+
+      cdcDesc = initCompleteCdcSerialPortInterface(
+        0.InterfaceNumber, 1, 8, 2, 64, 4.StringIndex
+      )
+
+    var hidDesc = initCompleteHidInterface(
+      2.InterfaceNumber, tusbHidReportDescLen, 3, 16, 5, str=5.StringIndex
+    )
+    hidDesc.hid.hidVersion = initBcdVersion(1, 1, 1)
+
+    let fullCfgDesc = serializeAll(cfgDesc, cdcDesc, hidDesc)
+
+    check:
+      fullCfgDesc.len == desclen
+      toByteArray(desclen, fullCfgDesc) == tusbDesc

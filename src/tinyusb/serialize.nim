@@ -1,6 +1,7 @@
 # Tools to generate packed byte arrays for USB transmission from Nim objects
 
 import std/macros
+import std/genasts
 
 proc serialize*(b: var string, x: uint8) =
   b.add x.char
@@ -52,3 +53,18 @@ macro toArrayLit*(s: static[string]): untyped =
   result = newNimNode(nnkBracket)
   for c in s:
     result.add newLit(c.uint8)
+
+macro serializeAll*(elems: varargs[untyped]): string =
+  ## Serialize multiple items, of potentially different type, to a single
+  ## string in a sequential order.
+  var body = newStmtList()
+  let sIdt = gensym(nskVar)
+  body.add:
+    genAst(s=sIdt):
+      var s: string
+
+  for e in elems:
+    body.add genAst(s=sIdt, e=e, s.serialize(e))
+
+  body.add sIdt
+  result = newBlockStmt(body)
