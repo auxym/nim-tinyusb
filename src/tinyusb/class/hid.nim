@@ -518,3 +518,77 @@ func initCompleteHidInterface*(itf: InterfaceNumber, reportDescLen: uint16,
     )
 
   )
+
+# Report Descriptors
+
+type
+  HidItemPrefix* = distinct uint8
+
+  HidShortItem*[N: static int] = object
+    prefix: HidItemPrefix
+    data: array[N, uint8]
+
+  HidReportDescriptor* = seq[HidShortItem]
+
+  HidItemType* {.pure.} = enum
+    Main, Global, Local
+
+  HidGlobalItemTag* {.pure.} = enum
+    UsagePage = 0b0000
+    LogicalMinimum = 0b0001
+    LogicalMaximum = 0b0010
+    PhysicalMinimum = 0b0011
+    PhysicalMaximum = 0b0100
+    UnitExponent = 0b0101
+    Unit = 0b0110
+    ReportSize = 0b0111
+    ReportId = 0b1000
+    ReportCount = 0b1001
+    Push = 0b1010
+    Pop = 0b1011
+
+  HidMainItemTag* {.pure.} = enum
+    Input = 0b1000
+    Output = 0b1001
+    Collection = 0b1010
+    Feature = 0b1011
+    EndCollection = 0b1100
+
+  HidLocalItemTag* {.pure.} = enum
+    Usage = 0b0000
+    UsageMinimum = 0b0001
+    UsageMaximum = 0b0010
+    DesignatorIndex = 0b0011
+    DesignatorMinimum = 0b0100
+    DesignatorMaximum = 0b0101
+    StringIndex = 0b0111
+    StringMinimum = 0b1000
+    StringMaximum = 0b1001
+    Delimiter = 0b1010
+
+template initPrefix(typ: HidItemType, tag:0..0b1111, size: static[0..4]): HidItemPrefix =
+  static:
+    if size == 3:
+      {.error: "Short item data size must be 1, 2 or 4".}
+  let sizeCode = case size:
+    of 0: 0
+    of 1: 1
+    of 2: 2
+    of 3: 3 # satisfy completeness check, we should never have 3
+    of 4: 4
+
+  result = HidItemPrefix(
+    sizeCode or ((typ.ord and 0b11) shl 2) or ((tag and 0b1111) shl 4)
+  )
+  
+template globalItem[N: static int](tag: HidGlobalItemTag, data: array[N, uint8]): HidShortItem[N] =
+  let prefix = initPrefix(HidItemType.Global, tag.ord, N)
+  result = HidShortItem(prefix: prefix, data: data)
+  
+template localItem[N: static int](tag: HidLocalItemTag, data: array[N, uint8]): HidShortItem[N] =
+  let prefix = initPrefix(HidItemType.Local, tag.ord, N)
+  result = HidShortItem(prefix: prefix, data: data)
+  
+template mainItem[N: static int](tag: HidMainItemTag, data: array[N, uint8]): HidShortItem[N] =
+  let prefix = initPrefix(HidItemType.Main, tag.ord, N)
+  result = HidShortItem(prefix: prefix, data: data)
