@@ -1,6 +1,9 @@
+import std/bitops
+import std/macros
+import std/genasts
+
 import ../descriptors
 import ../internal
-import std/bitops
 
 # HID Device API
 
@@ -490,7 +493,7 @@ func initHidDescriptor*(numDesc: uint8, reportDescType: HidDescriptorType,
 func initCompleteHidInterface*(itf: InterfaceNumber, reportDescLen: uint16,
                                epIn: EpNumber, epInSize: EpSize,
                                epInterval: uint8,
-                               bootProtocol: HidBootProtocol = HidBootProtocol.None, 
+                               bootProtocol: HidBootProtocol = HidBootProtocol.None,
                                str: StringIndex = StringIndexNone
                                ): CompleteHidInterfaceDescriptor =
   let sub = block:
@@ -525,9 +528,11 @@ func initCompleteHidInterface*(itf: InterfaceNumber, reportDescLen: uint16,
 type
   HidItemPrefix* = distinct uint8
 
-  HidShortItem*[N: static int] = object
+  HidShortItemData* = array[4, uint8]
+
+  HidShortItem* = object
     prefix*: HidItemPrefix
-    data*: array[N, uint8]
+    data*: HidShortItemData
 
   HidReportDescriptor* = seq[HidShortItem]
 
@@ -576,19 +581,26 @@ type
     UsageSwitch = 0x05
     UsageModifier = 0x06
 
-proc `size=`*(p: var HidItemPrefix, sizeCode: 0'u8..3'u8) =
+  ShortItemSizeCode = distinct range[0'u8..3'u8]
+
+template toSizeCode(x: 0..4): ShortItemSizeCode =
+  ShortItemSizeCode [0'u8, 1, 2, 255, 3][x]
+
+func size(p: HidItemPrefix): 0..4 =
+  result = p.uint8.bitsliced(0..1)
+  if result == 3: result = 4
+
+proc `size=`(p: var HidItemPrefix, size: 0..4) =
   var tmp = p.uint8
   tmp.clearMask(0..1)
-  tmp = tmp or sizeCode.uint8
+  tmp = tmp or size.toSizeCode.uint8
   p = tmp.HidItemPrefix
-
-template toSizeCode(x: 0..4): uint8 = [0'u8, 1, 2, 255, 3][x]
 
 proc serialize*(b: var string, x: HidShortItem) =
   # Count non-zero bytes in data array of item
   # Trailing zero bytes in data array can be removed to compress data
   var countNotZero = 0
-  while countNotZero < x.data.len and x.data[countNotZero] > 0:
+  while countNotZero < x.prefix.size and x.data[countNotZero] > 0:
     inc countNotZero
 
   # length of data array can only be 0, 1, 2, 4
@@ -600,42 +612,43 @@ proc serialize*(b: var string, x: HidShortItem) =
 
   let newPrefix = block:
     var p = x.prefix
-    p.size = countNotZero.toSizeCode
+    p.size = countNotZero
     p
 
   b.add newPrefix.char
   for i in 0 ..< countNotZero: b.add x.data[i].char
 
-func initPrefix(typ: HidItemType, tag:0..0b1111, size: static[0..4]):
-        HidItemPrefix {.compileTime.} =
-  when size == 3:
-    {.error: "size must be 0, 1, 2 or 4".}
-  let sizeCode = [0'u8, 1, 2, 255, 3][size]
-  result = HidItemPrefix(
-    sizeCode or ((typ.ord.uint8 and 0b11) shl 2) or ((tag.uint8 and 0b1111) shl 4)
-  )
+proc serialize*(items: seq[HidShortItem]): string =
+  for i in items:
+    result.serialize(i)
+
+func initPrefix(size: 0..4, typ: HidItemType, tag:0..0b1111): HidItemPrefix =
+  var p: uint8
+  p = p or ((typ.ord.uint8 and 0b11) shl 2)
+  p = p or ((tag.uint8 and 0b1111) shl 4)
+  result = p.HidItemPrefix
+  result.size = size
 
 template setbitTo[T: SomeUnsignedInt](x: var T, bit: Natural, val: 0..1) =
   clearbit x, bit
   x = x or (T(val) shl bit)
 
-template toLEBytes(x: uint16): array[2, uint8] =
-  var result: array[2, uint8]
-  result[0] = ((0x00FF'u16 and x) shr 0o00).uint8
-  result[1] = ((0xFF00'u16 and x) shr 0o10).uint8
-  result
-  
-func globalItem[N: static int](tag: HidGlobalItemTag, data: array[N, uint8]): HidShortItem[N] =
-  let prefix = initPrefix(HidItemType.Global, tag.ord, N)
+template copyLEBytes(x: uint16, dest: var HidShortItemData) =
+  dest[0] = ((0x00FF'u16 and x) shr 0o00).uint8
+  dest[1] = ((0xFF00'u16 and x) shr 0o10).uint8
+
+func globalItem(tag: HidGlobalItemTag, data: HidShortItemData): HidShortItem =
+  let prefix = initPrefix(4, HidItemType.Global, tag.ord)
   result = HidShortItem(prefix: prefix, data: data)
-  
-func localItem[N: static int](tag: HidLocalItemTag, data: array[N, uint8]): HidShortItem[N] =
-  let prefix = initPrefix(HidItemType.Local, tag.ord, N)
+
+func localItem(tag: HidLocalItemTag, data: HidShortItemData): HidShortItem =
+  let prefix = initPrefix(4, HidItemType.Local, tag.ord)
   result = HidShortItem(prefix: prefix, data: data)
-  
-func mainItem[N: static int](tag: HidMainItemTag, data: array[N, uint8]): HidShortItem[N] =
-  let prefix = initPrefix(HidItemType.Main, tag.ord, N)
-  result = HidShortItem[N](prefix: prefix, data: data)
+
+func mainItem(tag: HidMainItemTag, data: uint16): HidShortItem =
+  let prefix = initPrefix(2, HidItemType.Main, tag.ord)
+  result = HidShortItem(prefix: prefix)
+  copyLEBytes(data, result.data)
 
 type
   HidDataConstant* = enum hidData, hidConstant
@@ -646,59 +659,94 @@ func inputOutputFeatureData(
     dataOrConst: HidDataConstant, arrayVar: HidArrayVariable,
     absolute, wrap, linear, hasPreferredState, volatile, hasNullState: bool,
     bitfield: HidBitFieldBuffered
-    ): array[2, uint8] =
+    ): uint16 =
+  result.setBitTo(0, dataOrConst.ord)
+  result.setBitTo(1, arrayVar.ord)
+  if not absolute: result.setBit(2)
+  if wrap: result.setBit(3)
+  if not linear: result.setbit(4)
+  if not hasPreferredState: result.setbit(5)
+  if hasNullState: result.setbit(6)
+  if volatile: result.setbit(7)
+  result.setBitTo(8, bitfield.ord)
 
-  var data = 0'u16
-  data.setBitTo(0, dataOrConst.ord)
-  data.setBitTo(1, arrayVar.ord)
-  if not absolute: data.setBit(2)
-  if wrap: data.setBit(3)
-  if not linear: data.setbit(4)
-  if not hasPreferredState: data.setbit(5)
-  if hasNullState: data.setbit(6)
-  if volatile: data.setbit(7)
-  data.setBitTo(8, bitfield.ord)
-  result = toLEBytes(data)
+let itemProcs {.compileTime.} = genAst:
+  func input(
+      dataOrConst: HidDataConstant = hidData,
+      arrayVar: HidArrayVariable = hidArray,
+      absolute=true,
+      wrap=false,
+      linear=true,
+      hasPreferredState=true,
+      hasNullState=false,
+      bitfield: HidBitFieldBuffered = hidBitfield
+      ): HidShortItem =
 
-func input*(
-    dataOrConst: HidDataConstant = hidData,
-    arrayVar: HidArrayVariable = hidArray,
-    absolute=true,
-    wrap=false,
-    linear=true,
-    hasPreferredState=true,
-    hasNullState=false,
-    bitfield: HidBitFieldBuffered = hidBitfield
-    ): HidShortItem[2] =
+    ## Generate Input item in HID report descriptor
+    ## Note: the default value of each argument maps to a 0 in the data bitmap
 
-  ## Generate Input item in HID report descriptor
-  ## Note: the default value of each argument maps to a 0 in the data bitmap
-  
-  let data = inputOutputFeatureData(
-    dataOrConst, arrayVar, absolute, wrap, linear, hasPreferredState, hasNullState,
-    false, bitfield
-  )
-  result = mainItem(HidMainItemTag.Input, data)
+    let data = inputOutputFeatureData(
+      dataOrConst, arrayVar, absolute, wrap, linear, hasPreferredState, hasNullState,
+      false, bitfield
+    )
+    result = mainItem(HidMainItemTag.Input, data)
 
-func output*(dataOrConst: HidDataConstant, arrayVar: HidArrayVariable,
-            absolute, wrap, linear, hasPreferredState, hasNullState, volatile: bool,
-            bitfield: HidBitFieldBuffered): HidShortItem[2] =
-  let data = inputOutputFeatureData(
-    dataOrConst, arrayVar, absolute, wrap, linear, hasPreferredState, hasNullState,
-    volatile, bitfield
-  )
-  result = mainItem(HidMainItemTag.Output, data)
+  func output(
+      dataOrConst: HidDataConstant = hidData,
+      arrayVar: HidArrayVariable = hidArray,
+      absolute=true,
+      wrap=false,
+      linear=true,
+      hasPreferredState=true,
+      hasNullState=false,
+      volatile=false,
+      bitfield: HidBitFieldBuffered = hidBitfield
+      ): HidShortItem =
+    ## Generate Output item in HID report descriptor
+    ## Note: the default value of each argument maps to a 0 in the data bitmap
 
-func feature*(dataOrConst: HidDataConstant, arrayVar: HidArrayVariable,
-            absolute, wrap, linear, hasPreferredState, hasNullState, volatile: bool,
-            bitfield: HidBitFieldBuffered): HidShortItem[2] =
-  let data = inputOutputFeatureData(
-    dataOrConst, arrayVar, absolute, wrap, linear, hasPreferredState, hasNullState,
-    volatile, bitfield
-  )
-  result = mainItem(HidMainItemTag.Feature, data)
+    let data = inputOutputFeatureData(
+      dataOrConst, arrayVar, absolute, wrap, linear, hasPreferredState, hasNullState,
+      volatile, bitfield
+    )
+    result = mainItem(HidMainItemTag.Output, data)
 
-template collection*(kind: HidCollectionKind, items: varargs[HidShortItem]): untyped =
-  mainItem(HidMainItemTag.Collection, data=[kind.ord.uint8])
-  items
-  mainItem(HidMainItemTag.EndCollection, data=[])
+  func feature(
+      dataOrConst: HidDataConstant = hidData,
+      arrayVar: HidArrayVariable = hidArray,
+      absolute=true,
+      wrap=false,
+      linear=true,
+      hasPreferredState=true,
+      hasNullState=false,
+      volatile=false,
+      bitfield: HidBitFieldBuffered = hidBitfield
+      ): HidShortItem =
+    ## Generate a Feature item in HID report descriptor
+    ## Note: the default value of each argument maps to a 0 in the data bitmap
+    let data = inputOutputFeatureData(
+      dataOrConst, arrayVar, absolute, wrap, linear, hasPreferredState, hasNullState,
+      volatile, bitfield
+    )
+    result = mainItem(HidMainItemTag.Feature, data)
+
+  template collection(kind: HidCollectionKind, items: varargs[HidShortItem]): untyped =
+    mainItem(HidMainItemTag.Collection, data=[kind.ord.uint8])
+    items
+    mainItem(HidMainItemTag.EndCollection, data=[])
+
+macro hidReportDesc*(inner: untyped): string =
+  var blockbody = newStmtList()
+  copyChildrenTo(itemProcs, blockbody)
+
+  let seqlit = block:
+    var brack = newNimNode(nnkBracket)
+    for elem in inner:
+      brack.add elem
+    prefix(brack, "@")
+
+  blockbody.add:
+    genast(s = seqlit):
+      serialize(s)
+
+  result = newBlockStmt(blockbody)
