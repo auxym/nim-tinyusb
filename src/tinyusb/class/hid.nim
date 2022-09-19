@@ -608,7 +608,7 @@ proc serialize*(b: var string, x: HidShortItem) =
 
   # HID spec v1.11 allows abbreviating down to 0 bytes, but the examples
   # always keep at least 1 byte, so do the same thing.
-  if countNotZero == 0 and x.data.len > 0: countNotZero = 1
+  if countNotZero == 0 and x.prefix.size > 0: countNotZero = 1
 
   let newPrefix = block:
     var p = x.prefix
@@ -650,6 +650,9 @@ func mainItem(tag: HidMainItemTag, data: uint16): HidShortItem =
   result = HidShortItem(prefix: prefix)
   copyLEBytes(data, result.data)
 
+func mainItem(tag: HidMainItemTag): HidShortItem =
+  HidShortItem(prefix: initPrefix(0, HidItemType.Main, tag.ord))
+
 type
   HidDataConstant* = enum hidData, hidConstant
   HidArrayVariable* = enum hidArray, hidVariable
@@ -669,6 +672,12 @@ func inputOutputFeatureData(
   if hasNullState: result.setbit(6)
   if volatile: result.setbit(7)
   result.setBitTo(8, bitfield.ord)
+
+func collectionItem(kind: HidCollectionKind): HidShortItem =
+  mainItem(HidMainItemTag.Collection, kind.ord.uint16)
+
+func endCollectionItem: HidShortItem =
+  result = mainItem(HidMainItemTag.EndCollection)
 
 let itemProcs {.compileTime.} = genAst:
   func input(
@@ -730,19 +739,26 @@ let itemProcs {.compileTime.} = genAst:
     )
     result = mainItem(HidMainItemTag.Feature, data)
 
-  template collection(kind: HidCollectionKind, items: varargs[HidShortItem]): untyped =
-    mainItem(HidMainItemTag.Collection, data=[kind.ord.uint8])
-    items
-    mainItem(HidMainItemTag.EndCollection, data=[])
-
 macro hidReportDesc*(inner: untyped): string =
   var blockbody = newStmtList()
   copyChildrenTo(itemProcs, blockbody)
 
+  # Build seq of HidShortItem objects from inner
   let seqlit = block:
     var brack = newNimNode(nnkBracket)
     for elem in inner:
-      brack.add elem
+
+      # Magic to handle collection: insert the collection children inside
+      # collection / end collection items.
+      if elem.kind == nnkCall and eqIdent(elem[0], "collection"):
+        brack.add newCall(bindsym"collectionItem", elem[1])
+        for colmember in elem[2]:
+          brack.add colmember
+        brack.add newCall(bindsym"endCollectionItem")
+
+      # Anything other than a collection is added to the seq of items
+      else:
+        brack.add elem
     prefix(brack, "@")
 
   blockbody.add:
