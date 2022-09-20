@@ -739,6 +739,28 @@ let itemProcs {.compileTime.} = genAst:
     )
     result = mainItem(HidMainItemTag.Feature, data)
 
+iterator rchildren(s: NimNode): NimNode =
+  var allChildren: seq[NimNode]
+  for child in s.children: allChildren.add child
+  for i in countdown(allChildren.high, allChildren.low):
+    yield allChildren[i]
+
+func flattenCollections(inner: NimNode): seq[NimNode] {.compiletime.} =
+  # Magic to handle collection: insert the collection children inside
+  # collection / end collection items.
+  var stack: seq[NimNode]
+  for node in inner.rchildren:
+    stack.add node
+  while stack.len > 0:
+    let snode = stack.pop
+    if snode.kind == nnkCall and eqIdent(snode[0], "collection"):
+        result.add newCall(bindsym"collectionItem", snode[1])
+        stack.add newCall(bindsym"endCollectionItem")
+        for colmember in snode[2].rchildren:
+          stack.add colmember
+    else:
+      result.add snode
+
 macro hidReportDesc*(inner: untyped): string =
   var blockbody = newStmtList()
   copyChildrenTo(itemProcs, blockbody)
@@ -746,19 +768,8 @@ macro hidReportDesc*(inner: untyped): string =
   # Build seq of HidShortItem objects from inner
   let seqlit = block:
     var brack = newNimNode(nnkBracket)
-    for elem in inner:
-
-      # Magic to handle collection: insert the collection children inside
-      # collection / end collection items.
-      if elem.kind == nnkCall and eqIdent(elem[0], "collection"):
-        brack.add newCall(bindsym"collectionItem", elem[1])
-        for colmember in elem[2]:
-          brack.add colmember
-        brack.add newCall(bindsym"endCollectionItem")
-
-      # Anything other than a collection is added to the seq of items
-      else:
-        brack.add elem
+    for elem in inner.flattenCollections:
+      brack.add elem
     prefix(brack, "@")
 
   blockbody.add:

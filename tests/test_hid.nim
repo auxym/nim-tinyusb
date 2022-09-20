@@ -31,3 +31,14 @@ suite "HID Report Descriptors":
 
     check:
       desc == "\xA1\x01\x81\x02\x81\x01\x81\x00\xC0"
+
+  test "nested collections":
+    const desc = hidReportDesc:
+      collection(HidCollectionKind.Application):
+        input(hidData, hidVariable, absolute=true)
+        collection(HidCollectionKind.Physical):
+          input(hidConstant)
+        input(hidData, hidArray)
+
+    check:
+      desc == "\xA1\x01\x81\x02\xA1\x00\x81\x01\xC0\x81\x00\xC0"
