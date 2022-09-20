@@ -42,3 +42,9 @@ suite "HID Report Descriptors":
 
     check:
       desc == "\xA1\x01\x81\x02\xA1\x00\x81\x01\xC0\x81\x00\xC0"
+
+  test "Output item":
+    const outitem = hidReportDesc:
+      output(hidData, hidVariable, absolute=true)
+    check:
+      outitem == "\x91\x02"
