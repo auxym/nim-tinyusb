@@ -1,6 +1,7 @@
 import std/bitops
 import std/macros
 import std/genasts
+import std/strutils
 
 import ../descriptors
 import ../internal
@@ -583,6 +584,12 @@ type
 
   ShortItemSizeCode = distinct range[0'u8..3'u8]
 
+  HidDataConstant* = enum hidData, hidConstant
+
+  HidArrayVariable* = enum hidArray, hidVariable
+
+  HidBitFieldBuffered* = enum hidBitfield, hidBufferedBytes
+
 template toSizeCode(x: 0..4): ShortItemSizeCode =
   ShortItemSizeCode [0'u8, 1, 2, 255, 3][x]
 
@@ -618,7 +625,7 @@ proc serialize*(b: var string, x: HidShortItem) =
   b.add newPrefix.char
   for i in 0 ..< countNotZero: b.add x.data[i].char
 
-proc serialize*(items: seq[HidShortItem]): string =
+proc serialize(items: seq[HidShortItem]): string =
   for i in items:
     result.serialize(i)
 
@@ -653,11 +660,6 @@ func mainItem(tag: HidMainItemTag, data: uint16): HidShortItem =
 func mainItem(tag: HidMainItemTag): HidShortItem =
   HidShortItem(prefix: initPrefix(0, HidItemType.Main, tag.ord))
 
-type
-  HidDataConstant* = enum hidData, hidConstant
-  HidArrayVariable* = enum hidArray, hidVariable
-  HidBitFieldBuffered* = enum hidBitfield, hidBufferedBytes
-
 func inputOutputFeatureData(
     dataOrConst: HidDataConstant, arrayVar: HidArrayVariable,
     absolute, wrap, linear, hasPreferredState, volatile, hasNullState: bool,
@@ -673,71 +675,79 @@ func inputOutputFeatureData(
   if volatile: result.setbit(7)
   result.setBitTo(8, bitfield.ord)
 
-func collectionItem(kind: HidCollectionKind): HidShortItem =
+func hidReportDescItemCollection*(kind: HidCollectionKind): HidShortItem =
   mainItem(HidMainItemTag.Collection, kind.ord.uint16)
 
-func endCollectionItem: HidShortItem =
+func hidReportDescItemEndCollection*: HidShortItem =
   result = mainItem(HidMainItemTag.EndCollection)
 
-let itemProcs {.compileTime.} = genAst:
-  func input(
-      dataOrConst: HidDataConstant = hidData,
-      arrayVar: HidArrayVariable = hidArray,
-      absolute=true,
-      wrap=false,
-      linear=true,
-      hasPreferredState=true,
-      hasNullState=false,
-      bitfield: HidBitFieldBuffered = hidBitfield
-      ): HidShortItem =
+func hidReportDescItemInput*(
+    dataOrConst: HidDataConstant = hidData,
+    arrayVar: HidArrayVariable = hidArray,
+    absolute=true,
+    wrap=false,
+    linear=true,
+    hasPreferredState=true,
+    hasNullState=false,
+    bitfield: HidBitFieldBuffered = hidBitfield
+    ): HidShortItem =
 
-    ## Generate Input item in HID report descriptor
-    ## Note: the default value of each argument maps to a 0 in the data bitmap
+  ## Generate Input item in HID report descriptor
+  ## Note: the default value of each argument maps to a 0 in the data bitmap
 
-    let data = inputOutputFeatureData(
-      dataOrConst, arrayVar, absolute, wrap, linear, hasPreferredState, hasNullState,
-      false, bitfield
-    )
-    result = mainItem(HidMainItemTag.Input, data)
+  let data = inputOutputFeatureData(
+    dataOrConst, arrayVar, absolute, wrap, linear, hasPreferredState, hasNullState,
+    false, bitfield
+  )
+  result = mainItem(HidMainItemTag.Input, data)
 
-  func output(
-      dataOrConst: HidDataConstant = hidData,
-      arrayVar: HidArrayVariable = hidArray,
-      absolute=true,
-      wrap=false,
-      linear=true,
-      hasPreferredState=true,
-      hasNullState=false,
-      volatile=false,
-      bitfield: HidBitFieldBuffered = hidBitfield
-      ): HidShortItem =
-    ## Generate Output item in HID report descriptor
-    ## Note: the default value of each argument maps to a 0 in the data bitmap
+func hidReportDescItemOutput*(
+    dataOrConst: HidDataConstant = hidData,
+    arrayVar: HidArrayVariable = hidArray,
+    absolute=true,
+    wrap=false,
+    linear=true,
+    hasPreferredState=true,
+    hasNullState=false,
+    volatile=false,
+    bitfield: HidBitFieldBuffered = hidBitfield
+    ): HidShortItem =
+  ## Generate Output item in HID report descriptor
+  ## Note: the default value of each argument maps to a 0 in the data bitmap
 
-    let data = inputOutputFeatureData(
-      dataOrConst, arrayVar, absolute, wrap, linear, hasPreferredState, hasNullState,
-      volatile, bitfield
-    )
-    result = mainItem(HidMainItemTag.Output, data)
+  let data = inputOutputFeatureData(
+    dataOrConst, arrayVar, absolute, wrap, linear, hasPreferredState, hasNullState,
+    volatile, bitfield
+  )
+  result = mainItem(HidMainItemTag.Output, data)
 
-  func feature(
-      dataOrConst: HidDataConstant = hidData,
-      arrayVar: HidArrayVariable = hidArray,
-      absolute=true,
-      wrap=false,
-      linear=true,
-      hasPreferredState=true,
-      hasNullState=false,
-      volatile=false,
-      bitfield: HidBitFieldBuffered = hidBitfield
-      ): HidShortItem =
-    ## Generate a Feature item in HID report descriptor
-    ## Note: the default value of each argument maps to a 0 in the data bitmap
-    let data = inputOutputFeatureData(
-      dataOrConst, arrayVar, absolute, wrap, linear, hasPreferredState, hasNullState,
-      volatile, bitfield
-    )
-    result = mainItem(HidMainItemTag.Feature, data)
+func hidReportDescItemFeature*(
+    dataOrConst: HidDataConstant = hidData,
+    arrayVar: HidArrayVariable = hidArray,
+    absolute=true,
+    wrap=false,
+    linear=true,
+    hasPreferredState=true,
+    hasNullState=false,
+    volatile=false,
+    bitfield: HidBitFieldBuffered = hidBitfield
+    ): HidShortItem =
+  ## Generate a Feature item in HID report descriptor
+  ## Note: the default value of each argument maps to a 0 in the data bitmap
+  let data = inputOutputFeatureData(
+    dataOrConst, arrayVar, absolute, wrap, linear, hasPreferredState, hasNullState,
+    volatile, bitfield
+  )
+  result = mainItem(HidMainItemTag.Feature, data)
+
+func genShortProcs: seq[NimNode] {.compiletime.} =
+  let allItemProcs = [
+    "input", "output", "feature"
+  ]
+  for shortName in allItemProcs:
+    let longName = "hidReportDescItem" & shortName.capitalizeAscii()
+    result.add newLetStmt(ident(shortName), ident(longName))
+
 
 iterator rchildren(s: NimNode): NimNode =
   var allChildren: seq[NimNode]
@@ -754,8 +764,8 @@ func flattenCollections(inner: NimNode): seq[NimNode] {.compiletime.} =
   while stack.len > 0:
     let snode = stack.pop
     if snode.kind == nnkCall and eqIdent(snode[0], "collection"):
-        result.add newCall(bindsym"collectionItem", snode[1])
-        stack.add newCall(bindsym"endCollectionItem")
+        result.add newCall("hidReportDescItemCollection", snode[1])
+        stack.add newCall("hidReportDescItemEndCollection")
         for colmember in snode[2].rchildren:
           stack.add colmember
     else:
@@ -763,7 +773,7 @@ func flattenCollections(inner: NimNode): seq[NimNode] {.compiletime.} =
 
 macro hidReportDesc*(inner: untyped): string =
   var blockbody = newStmtList()
-  copyChildrenTo(itemProcs, blockbody)
+  for p in genShortProcs(): blockbody.add p
 
   # Build seq of HidShortItem objects from inner
   let seqlit = block:
