@@ -672,14 +672,14 @@ template copyLEBytes(x: (int8 | uint8), dest: var HidShortItemData) =
   dest[0] = (0xFF and x).uint8
 
 template copyLEBytes(x: (int16 | uint16), dest: var HidShortItemData) =
-  dest[0] = (0x00FF and x).uint8
-  dest[1] = ((0xFF00 and x) shl 0o10).uint8
+  dest[0] = x.bitsliced(0..7).uint8
+  dest[1] = x.bitsliced(8..15).uint8
 
 template copyLEBytes(x: (int32 | uint32), dest: var HidShortItemData) =
-  dest[0] = (0x000000FF and x).uint8
-  dest[1] = ((0x0000FF00 and x) shl 0o10).uint8
-  dest[2] = ((0x00FF0000 and x) shl 0o20).uint8
-  dest[3] = ((0xFF000000 and x) shl 0o30).uint8
+  dest[0] = x.bitsliced(0..7).uint8
+  dest[1] = x.bitsliced(8..15).uint8
+  dest[2] = x.bitsliced(16..23).uint8
+  dest[3] = x.bitsliced(24..32).uint8
 
 func globalItem[T: HidInt](tag: HidGlobalItemTag, data: T): HidShortItem =
   result.prefix = initPrefix(sizeof(T), HidItemType.Global, tag.ord)
@@ -783,14 +783,30 @@ func hidReportDescItemUsagePage*(page: HidUsagePage): HidShortItem =
 func hidReportDescItemLogicalMinimum*[T: HidSignedInt](x: T): HidShortItem =
   globalItem(HidGlobalItemTag.LogicalMinimum, x)
 
-func hidReportDescItemLogicalMaximum*(x: int32): HidShortItem =
+func hidReportDescItemLogicalMaximum*[T: HidSignedInt](x: T): HidShortItem =
   globalItem(HidGlobalItemTag.LogicalMaximum, x)
 
-func hidReportDescItemPhysicalMinimum*(x: int32): HidShortItem =
+func hidReportDescItemPhysicalMinimum*[T: HidSignedInt](x: T): HidShortItem =
   globalItem(HidGlobalItemTag.PhysicalMinimum, x)
 
-func hidReportDescItemPhysicalMaximum*(x: int32): HidShortItem =
+func hidReportDescItemPhysicalMaximum*[T: HidSignedInt](x: T): HidShortItem =
   globalItem(HidGlobalItemTag.PhysicalMaximum, x)
+
+type HidUnitSystem* {.pure.} = enum
+  None, SiLinear, SiRotation, EnglishLinear, EnglishRotation
+
+type HidExp* = range[-8'i8..7'i8]
+
+func hidReportDescItemUnit*(sys: HidUnitSystem, length, mass, time, temp,
+                           current, lum: HidExp = 0): HidShortItem =
+  var u = sys.ord.uint32
+  u = u or ((0x0F and length)  shl 4).uint32
+  u = u or ((0x0F and mass)    shl 8).uint32
+  u = u or ((0x0F and time)    shl 12).uint32
+  u = u or ((0x0F and temp)    shl 16).uint32
+  u = u or ((0x0F and current) shl 20).uint32
+  u = u or ((0x0F and lum)     shl 24).uint32
+  result = globalItem(HidGlobalItemTag.Unit, u)
 
 func genAliases: seq[NimNode] {.compiletime.} =
   let allItemProcs = [
@@ -798,7 +814,7 @@ func genAliases: seq[NimNode] {.compiletime.} =
     "input", "output", "feature",
     # Global items
     "usagePage", "logicalMinimum", "logicalMaximum", "physicalMinimum",
-    "physicalMaximum"
+    "physicalMaximum", "unit"
   ]
   for shortName in allItemProcs:
     let longName = "hidReportDescItem" & shortName.capitalizeAscii()

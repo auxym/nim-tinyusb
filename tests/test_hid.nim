@@ -1,6 +1,6 @@
 import std/unittest
 import ../src/tinyusb
-#import ../src/tinyusb/internal
+import ../src/tinyusb/internal
 
 suite "HID Report Descriptors":
   test "Input items":
@@ -86,3 +86,10 @@ suite "HID Report Descriptors":
       logmax1 == "\x25\x01"
       logmax101 == "\x25\x65"
       logmax127 == "\x25\x7F"
+
+  test "Unit item":
+    const
+      joule = hidReportDesc:
+        unit(HidUnitSystem.SiLinear, length=2, mass=1, time=(-2))
+    check:
+      joule == "\x66\x21\xE1"
