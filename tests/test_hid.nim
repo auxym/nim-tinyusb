@@ -65,3 +65,24 @@ suite "HID Report Descriptors":
       buttons == "\x05\x09"
       keycodes == "\x05\x07"
       leds == "\x05\x08"
+
+  test "Logical min/max items":
+    const
+      logmin0 = hidReportDesc:
+        logicalMinimum(0'i8)
+      logminneg127 = hidReportDesc:
+        logicalMinimum(-127'i8)
+      logmax1 = hidReportDesc:
+        logicalMaximum(1'i8)
+      logmax101 = hidReportDesc:
+        logicalMaximum(101'i8)
+      logmax127 = hidReportDesc:
+        logicalMaximum(127'i8)
+
+    check:
+      logmin0 == "\x15\x00"
+      logminneg127 == "\x15\x81"
+      logminneg127 == "\x15\x81"
+      logmax1 == "\x25\x01"
+      logmax101 == "\x25\x65"
+      logmax127 == "\x25\x7F"

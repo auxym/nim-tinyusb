@@ -665,17 +665,23 @@ template setbitTo[T: SomeUnsignedInt](x: var T, bit: Natural, val: 0..1) =
   clearbit x, bit
   x = x or (T(val) shl bit)
 
-template copyLEBytes(x: uint16, dest: var HidShortItemData) =
-  dest[0] = x.bitsliced(0..7).uint8
-  dest[1] = x.bitsliced(8..15).uint8
+type HidSignedInt = (int8 | int16 | int32)
+type HidInt = (int8 | int16 | int32 | uint8 | uint16 | uint32)
 
-template copyLEBytes(x: int32, dest: var HidShortItemData) =
-  dest[0] = x.bitsliced(0..7).uint8
-  dest[1] = x.bitsliced(8..15).uint8
-  dest[2] = x.bitsliced(16..23).uint8
-  dest[3] = x.bitsliced(24..31).uint8
+template copyLEBytes(x: (int8 | uint8), dest: var HidShortItemData) =
+  dest[0] = (0xFF and x).uint8
 
-func globalItem[T: SomeInteger](tag: HidGlobalItemTag, data: T): HidShortItem =
+template copyLEBytes(x: (int16 | uint16), dest: var HidShortItemData) =
+  dest[0] = (0x00FF and x).uint8
+  dest[1] = ((0xFF00 and x) shl 0o10).uint8
+
+template copyLEBytes(x: (int32 | uint32), dest: var HidShortItemData) =
+  dest[0] = (0x000000FF and x).uint8
+  dest[1] = ((0x0000FF00 and x) shl 0o10).uint8
+  dest[2] = ((0x00FF0000 and x) shl 0o20).uint8
+  dest[3] = ((0xFF000000 and x) shl 0o30).uint8
+
+func globalItem[T: HidInt](tag: HidGlobalItemTag, data: T): HidShortItem =
   result.prefix = initPrefix(sizeof(T), HidItemType.Global, tag.ord)
   copyLEBytes(data, result.data)
 
@@ -774,7 +780,7 @@ func hidReportDescItemFeature*(
 func hidReportDescItemUsagePage*(page: HidUsagePage): HidShortItem =
   globalItem(HidGlobalItemTag.UsagePage, page.ord.uint16)
 
-func hidReportDescItemLogicalMinimum*(x: int32): HidShortItem =
+func hidReportDescItemLogicalMinimum*[T: HidSignedInt](x: T): HidShortItem =
   globalItem(HidGlobalItemTag.LogicalMinimum, x)
 
 func hidReportDescItemLogicalMaximum*(x: int32): HidShortItem =
@@ -786,7 +792,7 @@ func hidReportDescItemPhysicalMinimum*(x: int32): HidShortItem =
 func hidReportDescItemPhysicalMaximum*(x: int32): HidShortItem =
   globalItem(HidGlobalItemTag.PhysicalMaximum, x)
 
-func genShortProcs: seq[NimNode] {.compiletime.} =
+func genAliases: seq[NimNode] {.compiletime.} =
   let allItemProcs = [
     # Main items
     "input", "output", "feature",
@@ -796,8 +802,9 @@ func genShortProcs: seq[NimNode] {.compiletime.} =
   ]
   for shortName in allItemProcs:
     let longName = "hidReportDescItem" & shortName.capitalizeAscii()
-    result.add newLetStmt(ident(shortName), ident(longName))
-
+    result.add:
+      genAst(s=ident(shortName), l=ident(longName)):
+        template s(args: varargs[untyped]): auto = l(args)
 
 iterator rchildren(s: NimNode): NimNode =
   var allChildren: seq[NimNode]
@@ -823,7 +830,7 @@ func flattenCollections(inner: NimNode): seq[NimNode] {.compiletime.} =
 
 macro hidReportDesc*(inner: untyped): string =
   var blockbody = newStmtList()
-  for p in genShortProcs(): blockbody.add p
+  for p in genAliases(): blockbody.add p
 
   # Build seq of HidShortItem objects from inner
   let seqlit = block:
