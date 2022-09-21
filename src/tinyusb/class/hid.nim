@@ -593,6 +593,12 @@ type
 template toSizeCode(x: 0..4): ShortItemSizeCode =
   ShortItemSizeCode [0'u8, 1, 2, 255, 3][x]
 
+func itemType(item: HidShortItem): HidItemType =
+  HidItemType(item.prefix.uint8.bitsliced(2..3))
+
+func tag(item: HidShortItem): uint8 =
+  item.prefix.uint8.bitsliced(4..7)
+
 func size(p: HidItemPrefix): 0..4 =
   result = p.uint8.bitsliced(0..1)
   if result == 3: result = 4
@@ -603,27 +609,39 @@ proc `size=`(p: var HidItemPrefix, size: 0..4) =
   tmp = tmp or size.toSizeCode.uint8
   p = tmp.HidItemPrefix
 
-proc serialize*(b: var string, x: HidShortItem) =
-  # Count non-zero bytes in data array of item
-  # Trailing zero bytes in data array can be removed to compress data
-  var countNotZero = 0
-  while countNotZero < x.prefix.size and x.data[countNotZero] > 0:
-    inc countNotZero
-
-  # length of data array can only be 0, 1, 2, 4
-  if countNotZero == 3: countNotZero = 4
+func abbreviate(item: HidShortItem): HidShortItem =
+  ## Reduce the size code in the item prefix when possible.
+  ## HID spec specifies that trailing zero bytes can be omitted is some cases.
 
   # HID spec v1.11 allows abbreviating down to 0 bytes, but the examples
   # always keep at least 1 byte, so do the same thing.
-  if countNotZero == 0 and x.prefix.size > 0: countNotZero = 1
+  if item.prefix.size <= 1: return item
 
-  let newPrefix = block:
-    var p = x.prefix
-    p.size = countNotZero
-    p
+  # According to HID Usage Tables v 1.3 section 3.1, usage-related tags have
+  # different interpretations based on their size, therefore should be abbreviated.
+  const localItemUsageTags = {
+    HidLocalItemTag.Usage.ord,
+    HidLocalItemTag.UsageMaximum.ord,
+    HidLocalItemTag.UsageMinimum.ord
+  }
+  if item.itemType == HidItemType.Global and item.tag == HidGlobalItemTag.UsagePage.ord:
+    return item
+  if item.itemType == HidItemType.Local and item.tag in localItemUsageTags:
+    return item
 
-  b.add newPrefix.char
-  for i in 0 ..< countNotZero: b.add x.data[i].char
+  # abbreviate: count nonzero bytes and update result size field accordingly
+  var sz = item.prefix.size
+  while sz > 1 and item.data[sz - 1] == 0:
+    dec sz
+  # length of data array can only be 0, 1, 2, 4
+  if sz == 3: sz = 4
+  result = item
+  result.prefix.size = sz
+
+proc serialize(b: var string, item: HidShortItem) =
+  let abbv = abbreviate item
+  b.add abbv.prefix.char
+  for i in 0 ..< abbv.prefix.size: b.add abbv.data[i].char
 
 proc serialize(items: seq[HidShortItem]): string =
   for i in items:
@@ -641,23 +659,29 @@ template setbitTo[T: SomeUnsignedInt](x: var T, bit: Natural, val: 0..1) =
   x = x or (T(val) shl bit)
 
 template copyLEBytes(x: uint16, dest: var HidShortItemData) =
-  dest[0] = ((0x00FF'u16 and x) shr 0o00).uint8
-  dest[1] = ((0xFF00'u16 and x) shr 0o10).uint8
+  dest[0] = x.bitsliced(0..7).uint8
+  dest[1] = x.bitsliced(8..15).uint8
 
-func globalItem(tag: HidGlobalItemTag, data: HidShortItemData): HidShortItem =
-  let prefix = initPrefix(4, HidItemType.Global, tag.ord)
-  result = HidShortItem(prefix: prefix, data: data)
+template copyLEBytes(x: uint32, dest: var HidShortItemData) =
+  dest[0] = x.bitsliced(0..7).uint8
+  dest[1] = x.bitsliced(8..15).uint8
+  dest[2] = x.bitsliced(16..23).uint8
+  dest[3] = x.bitsliced(24..31).uint8
+
+func globalItem(tag: HidGlobalItemTag, data: uint32): HidShortItem =
+  result.prefix = initPrefix(4, HidItemType.Global, tag.ord)
+  copyLEBytes(data, result.data)
 
 func localItem(tag: HidLocalItemTag, data: HidShortItemData): HidShortItem =
   let prefix = initPrefix(4, HidItemType.Local, tag.ord)
   result = HidShortItem(prefix: prefix, data: data)
 
 func mainItem(tag: HidMainItemTag, data: uint16): HidShortItem =
-  let prefix = initPrefix(2, HidItemType.Main, tag.ord)
-  result = HidShortItem(prefix: prefix)
+  result.prefix = initPrefix(2, HidItemType.Main, tag.ord)
   copyLEBytes(data, result.data)
 
 func mainItem(tag: HidMainItemTag): HidShortItem =
+  ## Main item without any data
   HidShortItem(prefix: initPrefix(0, HidItemType.Main, tag.ord))
 
 func inputOutputFeatureData(
@@ -739,6 +763,9 @@ func hidReportDescItemFeature*(
     volatile, bitfield
   )
   result = mainItem(HidMainItemTag.Feature, data)
+
+func hidReportDescItemUsagePage*(page: uint16): HidShortItem =
+  discard
 
 func genShortProcs: seq[NimNode] {.compiletime.} =
   let allItemProcs = [
