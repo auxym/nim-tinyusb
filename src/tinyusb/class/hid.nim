@@ -5,6 +5,9 @@ import std/strutils
 
 import ../descriptors
 import ../internal
+import ./hid_usages
+
+export hid_usages
 
 # HID Device API
 
