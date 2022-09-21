@@ -48,3 +48,20 @@ suite "HID Report Descriptors":
       output(hidData, hidVariable, absolute=true)
     check:
       outitem == "\x91\x02"
+
+  test "Global usage page item":
+    const
+      generic = hidReportDesc:
+        usagePage(HidUsagePage.GenericDesktopControls)
+      buttons = hidReportDesc:
+        usagePage(HidUsagePage.Buttons)
+      keycodes = hidReportDesc:
+        usagePage(HidUsagePage.Keyboard)
+      leds = hidReportDesc:
+        usagePage(HidUsagePage.LEDs)
+
+    check:
+      generic == "\x05\x01"
+      buttons == "\x05\x09"
+      keycodes == "\x05\x07"
+      leds == "\x05\x08"

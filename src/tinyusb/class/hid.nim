@@ -618,23 +618,27 @@ func abbreviate(item: HidShortItem): HidShortItem =
 
   # HID spec v1.11 allows abbreviating down to 0 bytes, but the examples
   # always keep at least 1 byte, so do the same thing.
-  if item.prefix.size <= 1: return item
+  const minSize = 1
+  if item.prefix.size <= minSize: return item
 
   # According to HID Usage Tables v 1.3 section 3.1, usage-related tags have
-  # different interpretations based on their size, therefore should be abbreviated.
+  # different interpretations based on their size, therefore:
+  #   - Usage of size 2 bytes denotes an id can be abbreviated to 1
+  #   - Usage of size 4 should never be abbreviated as it denotes a combined
+  #     usage id and usage page.
   const localItemUsageTags = {
     HidLocalItemTag.Usage.ord,
     HidLocalItemTag.UsageMaximum.ord,
     HidLocalItemTag.UsageMinimum.ord
   }
-  if item.itemType == HidItemType.Global and item.tag == HidGlobalItemTag.UsagePage.ord:
-    return item
-  if item.itemType == HidItemType.Local and item.tag in localItemUsageTags:
+  if item.itemType == HidItemType.Local and
+      item.tag in localItemUsageTags and
+      item.prefix.size == 4:
     return item
 
   # abbreviate: count nonzero bytes and update result size field accordingly
   var sz = item.prefix.size
-  while sz > 1 and item.data[sz - 1] == 0:
+  while sz > minSize and item.data[sz - 1] == 0:
     dec sz
   # length of data array can only be 0, 1, 2, 4
   if sz == 3: sz = 4
@@ -665,19 +669,19 @@ template copyLEBytes(x: uint16, dest: var HidShortItemData) =
   dest[0] = x.bitsliced(0..7).uint8
   dest[1] = x.bitsliced(8..15).uint8
 
-template copyLEBytes(x: uint32, dest: var HidShortItemData) =
+template copyLEBytes(x: int32, dest: var HidShortItemData) =
   dest[0] = x.bitsliced(0..7).uint8
   dest[1] = x.bitsliced(8..15).uint8
   dest[2] = x.bitsliced(16..23).uint8
   dest[3] = x.bitsliced(24..31).uint8
 
-func globalItem(tag: HidGlobalItemTag, data: uint32): HidShortItem =
-  result.prefix = initPrefix(4, HidItemType.Global, tag.ord)
+func globalItem[T: SomeInteger](tag: HidGlobalItemTag, data: T): HidShortItem =
+  result.prefix = initPrefix(sizeof(T), HidItemType.Global, tag.ord)
   copyLEBytes(data, result.data)
 
-func localItem(tag: HidLocalItemTag, data: HidShortItemData): HidShortItem =
-  let prefix = initPrefix(4, HidItemType.Local, tag.ord)
-  result = HidShortItem(prefix: prefix, data: data)
+#func localItem(tag: HidLocalItemTag, data: HidShortItemData): HidShortItem =
+#  let prefix = initPrefix(4, HidItemType.Local, tag.ord)
+#  result = HidShortItem(prefix: prefix, data: data)
 
 func mainItem(tag: HidMainItemTag, data: uint16): HidShortItem =
   result.prefix = initPrefix(2, HidItemType.Main, tag.ord)
@@ -767,12 +771,28 @@ func hidReportDescItemFeature*(
   )
   result = mainItem(HidMainItemTag.Feature, data)
 
-func hidReportDescItemUsagePage*(page: uint16): HidShortItem =
-  discard
+func hidReportDescItemUsagePage*(page: HidUsagePage): HidShortItem =
+  globalItem(HidGlobalItemTag.UsagePage, page.ord.uint16)
+
+func hidReportDescItemLogicalMinimum*(x: int32): HidShortItem =
+  globalItem(HidGlobalItemTag.LogicalMinimum, x)
+
+func hidReportDescItemLogicalMaximum*(x: int32): HidShortItem =
+  globalItem(HidGlobalItemTag.LogicalMaximum, x)
+
+func hidReportDescItemPhysicalMinimum*(x: int32): HidShortItem =
+  globalItem(HidGlobalItemTag.PhysicalMinimum, x)
+
+func hidReportDescItemPhysicalMaximum*(x: int32): HidShortItem =
+  globalItem(HidGlobalItemTag.PhysicalMaximum, x)
 
 func genShortProcs: seq[NimNode] {.compiletime.} =
   let allItemProcs = [
-    "input", "output", "feature"
+    # Main items
+    "input", "output", "feature",
+    # Global items
+    "usagePage", "logicalMinimum", "logicalMaximum", "physicalMinimum",
+    "physicalMaximum"
   ]
   for shortName in allItemProcs:
     let longName = "hidReportDescItem" & shortName.capitalizeAscii()
