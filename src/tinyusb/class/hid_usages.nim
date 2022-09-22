@@ -28,8 +28,8 @@ type HidUsagePage* {.pure, size: 2.} = enum
   VendorSpecific = 0x00FF
 
 type HidUsage* = object
-  page: HidUsagePage
-  id: uint16
+  page*: HidUsagePage
+  id*: uint16
 
 const
   hidUsageGenericDesktopControlsUndefined* = HidUsage(page: GenericDesktopControls, id: 0x0000)

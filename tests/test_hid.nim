@@ -93,3 +93,30 @@ suite "HID Report Descriptors":
         unit(HidUnitSystem.SiLinear, length=2, mass=1, time=(-2))
     check:
       joule == "\x66\x21\xE1"
+
+  test "Report size":
+    const
+      repsize = hidReportDesc:
+        reportSize(8)
+    check:
+      repSize == "\x75\x08"
+
+  test "Report count":
+    const
+      repcount = hidReportDesc:
+        reportCount(6)
+    check:
+      repCount == "\x95\x06"
+
+  test "Usage and usage min/max items":
+    const
+      kbUsage = hidReportDesc:
+        usage(hidUsageGenericDesktopControlsKeyboard.id)
+      min = hidReportDesc:
+        usageMinimum(224)
+      max = hidReportDesc:
+        usageMaximum(231)
+    check:
+      kbUsage == "\x09\x06"
+      min == "\x19\xE0"
+      max == "\x29\xE7"

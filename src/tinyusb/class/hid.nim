@@ -593,6 +593,12 @@ type
 
   HidBitFieldBuffered* = enum hidBitfield, hidBufferedBytes
 
+  # HidUnitSystem and HidExp are used for the Unit item in report descriptors
+  HidUnitSystem* {.pure.} = enum
+    None, SiLinear, SiRotation, EnglishLinear, EnglishRotation
+
+  HidExp* = range[-8'i8..7'i8]
+
 template toSizeCode(x: 0..4): ShortItemSizeCode =
   ShortItemSizeCode [0'u8, 1, 2, 255, 3][x]
 
@@ -685,9 +691,15 @@ func globalItem[T: HidInt](tag: HidGlobalItemTag, data: T): HidShortItem =
   result.prefix = initPrefix(sizeof(T), HidItemType.Global, tag.ord)
   copyLEBytes(data, result.data)
 
-#func localItem(tag: HidLocalItemTag, data: HidShortItemData): HidShortItem =
-#  let prefix = initPrefix(4, HidItemType.Local, tag.ord)
-#  result = HidShortItem(prefix: prefix, data: data)
+func globalItem(tag: HidGlobalItemTag): HidShortItem =
+  result.prefix = initPrefix(0, HidItemType.Global, tag.ord)
+
+func localItem[T: HidInt](tag: HidLocalItemTag, data: T): HidShortItem =
+  result.prefix = initPrefix(sizeof(T), HidItemType.Local, tag.ord)
+  copyLEBytes(data, result.data)
+
+func localItem(tag: HidGlobalItemTag): HidShortItem =
+  result.prefix = initPrefix(0, HidItemType.Local, tag.ord)
 
 func mainItem(tag: HidMainItemTag, data: uint16): HidShortItem =
   result.prefix = initPrefix(2, HidItemType.Main, tag.ord)
@@ -792,10 +804,8 @@ func hidReportDescItemPhysicalMinimum*[T: HidSignedInt](x: T): HidShortItem =
 func hidReportDescItemPhysicalMaximum*[T: HidSignedInt](x: T): HidShortItem =
   globalItem(HidGlobalItemTag.PhysicalMaximum, x)
 
-type HidUnitSystem* {.pure.} = enum
-  None, SiLinear, SiRotation, EnglishLinear, EnglishRotation
-
-type HidExp* = range[-8'i8..7'i8]
+func hidReportDescItemUnitExponent*[T: HidSignedInt](x: T): HidShortItem =
+  globalItem(HidGlobalItemTag.UnitExponent, x)
 
 func hidReportDescItemUnit*(sys: HidUnitSystem, length, mass, time, temp,
                            current, lum: HidExp = 0): HidShortItem =
@@ -808,18 +818,91 @@ func hidReportDescItemUnit*(sys: HidUnitSystem, length, mass, time, temp,
   u = u or ((0x0F and lum)     shl 24).uint32
   result = globalItem(HidGlobalItemTag.Unit, u)
 
+func hidReportDescItemReportSize*(bits: uint32): HidShortItem =
+  ## Set size of each report field in bits
+  globalItem(HidGlobalItemTag.ReportSize, bits)
+
+func hidReportDescItemReportId*(id: 1'u8..uint8.high): HidShortItem =
+  ## Report ID for descriptors with multiple reports
+  globalItem(HidGlobalItemTag.ReportId, id)
+
+func hidReportDescItemReportCount*(count: uint32): HidShortItem =
+  ## Set number of fields in report
+  globalItem(HidGlobalItemTag.ReportCount, count)
+
+func hidReportDescItemPush*: HidShortItem =
+  ## Instruct the report descriptor parser to push the current global item
+  ## state to a stack.
+  globalItem(HidGlobalItemTag.Push)
+
+func hidReportDescItemPop*: HidShortItem =
+  ## Instruct the report descriptor parser to replace the current global item
+  ## state with the structure currently on top of the stack.
+  globalItem(HidGlobalItemTag.Pop)
+
+proc toUint32(u: HidUsage): uint32 =
+  u.id.uint32 or (u.page.ord.uint32 shl 8)
+
+func hidReportDescItemUsage*(u: HidUsage): HidShortItem =
+  ## Set the fully qualified (page + id)  usage
+  localItem(HidLocalItemTag.Usage, u.toUint32)
+
+func hidReportDescItemUsage*(id: uint16): HidShortItem =
+  ## Set the usage id to be concatenated with the previously set Usage Page
+  localItem(HidLocalItemTag.Usage, id)
+
+func hidReportDescItemUsageMinimum*(u: HidUsage): HidShortItem =
+  ## Defines the starting usage id associated with an array or bitmap.
+  localItem(HidLocalItemTag.UsageMinimum, u.toUint32)
+
+func hidReportDescItemUsageMinimum*(id: uint16): HidShortItem =
+  ## Defines the starting usage id associated with an array or bitmap.
+  localItem(HidLocalItemTag.UsageMinimum, id)
+
+func hidReportDescItemUsageMaximum*(u: HidUsage): HidShortItem =
+  ## Defines the starting usage id associated with an array or bitmap.
+  localItem(HidLocalItemTag.UsageMaximum, u.toUint32)
+
+func hidReportDescItemUsageMaximum*(id: uint16): HidShortItem =
+  ## Defines the starting usage id associated with an array or bitmap.
+  localItem(HidLocalItemTag.UsageMaximum, id)
+
+macro idents2Nodes(ids: varargs[untyped]): untyped =
+  var brack = nnkBracket.newTree
+  for node in ids:
+    let name = $node
+    brack.add:
+      genAst(name):
+        ident(name)
+  result = brack
+
 func genAliases: seq[NimNode] {.compiletime.} =
-  let allItemProcs = [
-    # Main items
-    "input", "output", "feature",
-    # Global items
-    "usagePage", "logicalMinimum", "logicalMaximum", "physicalMinimum",
-    "physicalMaximum", "unit"
-  ]
-  for shortName in allItemProcs:
-    let longName = "hidReportDescItem" & shortName.capitalizeAscii()
+  let allItemProcs = idents2Nodes(
+    hidReportDescItemInput,
+    hidReportDescItemOutput,
+    hidReportDescItemUsagePage,
+    hidReportDescItemLogicalMaximum,
+    hidReportDescItemLogicalMinimum,
+    hidReportDescItemPhysicalMaximum,
+    hidReportDescItemPhysicalMinimum,
+    hidReportDescItemUnit,
+    hidReportDescItemUnitExponent,
+    hidReportDescItemReportSize,
+    hidReportDescItemReportId,
+    hidReportDescItemReportCount,
+    hidReportDescItemReportPush,
+    hidReportDescItemReportPop,
+    hidReportDescItemUsage,
+    hidReportDescItemUsageMinimum,
+    hidReportDescItemUsageMaximum,
+  )
+  for procIdent in allItemProcs:
+    let shortIdent = block:
+      var s = ($procIdent).replace("hidReportDescItem", "")
+      s[0] = s[0].toLowerAscii
+      ident s
     result.add:
-      genAst(s=ident(shortName), l=ident(longName)):
+      genAst(s=shortIdent, l=procIdent):
         template s(args: varargs[untyped]): auto = l(args)
 
 iterator rchildren(s: NimNode): NimNode =
