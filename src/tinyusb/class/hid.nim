@@ -698,9 +698,6 @@ func localItem[T: HidInt](tag: HidLocalItemTag, data: T): HidShortItem =
   result.prefix = initPrefix(sizeof(T), HidItemType.Local, tag.ord)
   copyLEBytes(data, result.data)
 
-func localItem(tag: HidGlobalItemTag): HidShortItem =
-  result.prefix = initPrefix(0, HidItemType.Local, tag.ord)
-
 func mainItem(tag: HidMainItemTag, data: uint16): HidShortItem =
   result.prefix = initPrefix(2, HidItemType.Main, tag.ord)
   copyLEBytes(data, result.data)
@@ -867,6 +864,33 @@ func hidReportDescItemUsageMaximum*(id: uint16): HidShortItem =
   ## Defines the starting usage id associated with an array or bitmap.
   localItem(HidLocalItemTag.UsageMaximum, id)
 
+func hidReportDescItemDesignatorIndex*(id: uint16): HidShortItem =
+  ## Determines the body part used for a control. Index points to a designator
+  ## in the Physical descriptor.
+  localItem(HidLocalItemTag.DesignatorIndex, id)
+
+func hidReportDescItemDesignatorMinimum*(id: uint16): HidShortItem =
+  ## Defines the index of the starting designator associated with an array or
+  ## bitmap.
+  localItem(HidLocalItemTag.DesignatorMinimum, id)
+
+func hidReportDescItemDesignatorMaximum*(id: uint16): HidShortItem =
+  ## Defines the index of the ending designator associated with an array or
+  ## bitmap.
+  localItem(HidLocalItemTag.DesignatorMaximum, id)
+
+func hidReportDescItemStringIndex*(id: StringIndex): HidShortItem =
+  localItem(HidLocalItemTag.StringIndex, id.uint8)
+
+func hidReportDescItemStringMinimum*(id: StringIndex): HidShortItem =
+  localItem(HidLocalItemTag.StringMinimum, id.uint8)
+
+func hidReportDescItemStringMaximum*(id: StringIndex): HidShortItem =
+  localItem(HidLocalItemTag.StringMaximum, id.uint8)
+
+func hidReportDescItemDelimiter*(x: 0'u8..1'u8): HidShortItem =
+  localItem(HidLocalItemTag.Delimiter, x)
+
 macro idents2Nodes(ids: varargs[untyped]): untyped =
   var brack = nnkBracket.newTree
   for node in ids:
@@ -895,6 +919,13 @@ func genAliases: seq[NimNode] {.compiletime.} =
     hidReportDescItemUsage,
     hidReportDescItemUsageMinimum,
     hidReportDescItemUsageMaximum,
+    hidReportDescItemDesignatorIndex,
+    hidReportDescItemDesignatorMinimum,
+    hidReportDescItemDesignatorMaximum,
+    hidReportDescItemStringIndex,
+    hidReportDescItemStringMinimum,
+    hidReportDescItemStringMaximum,
+    hidReportDescItemStringDelimiter,
   )
   for procIdent in allItemProcs:
     let shortIdent = block:
