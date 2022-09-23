@@ -51,10 +51,10 @@ suite "Validate descriptors against TinyUSB macros":
 
     let
       tusbDesc {.importc: "desc_hid_itf".}: array[desclen, uint8]
-      tusbReportDescLen {.importc: "desc_hid_report_size".}: uint16
+      tusbReportDescLen {.importc: "desc_hid_report_size".}: csize_t
 
     var nimDesc = initCompleteHidInterface(
-      2.InterfaceNumber, tusbReportDescLen, 3, 16, 5, str=5.StringIndex
+      2.InterfaceNumber, tusbReportDescLen.uint16, 3, 16, 5, str=5.StringIndex
     )
     nimDesc.hid.hidVersion = initBcdVersion(1, 1, 1)
 
@@ -72,7 +72,7 @@ suite "Validate descriptors against TinyUSB macros":
 
     let
       tusbDesc {.importc: "desc_fs_configuration".}: array[desclen, uint8]
-      tusbHidReportDescLen {.importc: "desc_hid_report_size".}: uint16
+      tusbHidReportDescLen {.importc: "desc_hid_report_size".}: csize_t
 
       cfgDesc = initConfigurationDescriptor(
         val=1, totalLength=desclen, numItf=3, powerma=100,
@@ -83,7 +83,7 @@ suite "Validate descriptors against TinyUSB macros":
       )
 
     var hidDesc = initCompleteHidInterface(
-      2.InterfaceNumber, tusbHidReportDescLen, 3, 16, 5, str=5.StringIndex
+      2.InterfaceNumber, tusbHidReportDescLen.uint16, 3, 16, 5, str=5.StringIndex
     )
     hidDesc.hid.hidVersion = initBcdVersion(1, 1, 1)
 
@@ -96,12 +96,12 @@ suite "Validate descriptors against TinyUSB macros":
   test "TinyUSB HID Keyboard Report Descriptor":
     const descLen = 65
     let
-      #tusbKbReportDescLen {.importc: "desc_hid_kb_report_size".}: uint16
+      #tusbKbReportDescLen {.importc: "desc_hid_kb_report_size".}: csize_t
       tusbKbReportDesc {.importc: "desc_hid_kb_report".}: array[desclen, uint8]
 
     # Tinyusb KB report mostly matches the example KB report in HID spec v1.11,
     # except for the keypress usage min item. TinyUSB keeps one extra trailing
-    # zero byte. Here we remove (abbreviate) this zero bytes and set the size
+    # zero byte. Here we remove (abbreviate) this zero byte and set the size
     # field in the item prefix to 1 instead of 2.
     var tusbReportStr = tusbKbReportDesc.toString
     block:
@@ -117,3 +117,10 @@ suite "Validate descriptors against TinyUSB macros":
     # Now we can compare to our own KB report descriptor
     check:
       keyboardReportDescriptor() == tusbReportStr
+
+  test "TinyUSB HID Mouse Report Descriptor":
+    const descLen = 77
+    let
+      #tusbMouseReportDescLen {.importc: "desc_hid_mouse_report_size".}: csize_t
+      tusbMouseReportDesc {.importc: "desc_hid_mouse_report".}: array[desclen, uint8]
+    echo tusbMouseReportDesc.hexRepr
