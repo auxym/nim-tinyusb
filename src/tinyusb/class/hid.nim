@@ -608,11 +608,11 @@ func itemType(item: HidShortItem): HidItemType =
 func tag(item: HidShortItem): uint8 =
   item.prefix.uint8.bitsliced(4..7)
 
-func size(p: HidItemPrefix): 0..4 =
+func size*(p: HidItemPrefix): 0..4 =
   result = p.uint8.bitsliced(0..1)
   if result == 3: result = 4
 
-proc `size=`(p: var HidItemPrefix, size: 0..4) =
+proc `size=`*(p: var HidItemPrefix, size: 0..4) =
   var tmp = p.uint8
   tmp.clearMask(0..1)
   tmp = tmp or size.toSizeCode.uint8
@@ -640,6 +640,22 @@ func abbreviate(item: HidShortItem): HidShortItem =
   if item.itemType == HidItemType.Local and
       item.tag in localItemUsageTags and
       item.prefix.size == 4:
+    return item
+
+  # Never abbreviate items when the data is to be interpreted as signed. For example,
+  # int16(0x00FF) is +255, but would be interpreted as a negative number (int8) if
+  # it was abbreviated to 0xFF.
+  #
+  # Note: we could make a smart algorithm here that abbreviates to the smallest
+  # signed type that can represent the value. But the user can also manually specify
+  # the constant of the right type when creating the item.
+  const signedDataTags = {
+    HidGlobalItemTag.LogicalMinimum.ord, HidGlobalItemTag.LogicalMaximum.ord,
+    HidGlobalItemTag.PhysicalMaximum.ord, HidGlobalItemTag.PhysicalMinimum.ord,
+    HidGlobalItemTag.UnitExponent.ord
+  }
+  # Note: all local and main items are always unsigned.
+  if item.itemType == HidItemType.Global and item.tag in signedDataTags:
     return item
 
   # abbreviate: count nonzero bytes and update result size field accordingly
@@ -974,3 +990,46 @@ macro hidReportDesc*(inner: untyped): string =
       serialize(s)
 
   result = newBlockStmt(blockbody)
+
+func keyboardReportDescriptor*(id = -1): string =
+  hidReportDesc:
+    usagePage(HidUsagePage.GenericDesktopControls)
+    usage(hidUsageGenericDesktopControlsKeyboard.id)
+    collection(HidCollectionKind.Application):
+      # 8-bit bitfield for modifier keys
+      usagePage(HidUsagePage.Keyboard)
+      usageMinimum(224)
+      usageMaximum(231)
+      logicalMinimum(0i8)
+      logicalMaximum(1i8)
+      reportCount(8)
+      reportSize(1)
+      input(hidData, hidVariable, absolute=true)
+
+      # 8 bits padding (?)
+      reportCount(1)
+      reportSize(8)
+      input(hidConstant)
+
+      # 5-bit output report to set LEDs
+      usagePage(HidUsagePage.LEDs)
+      usageMinimum(1)
+      usageMaximum(5)
+      reportCount(5)
+      reportSize(1)
+      output(hidData, hidVariable, absolute=true)
+
+      # 3 bits padding for byte alignment
+      reportCount(1)
+      reportSize(3)
+      output(hidConstant)
+
+      # 6X 1-byte keycode
+      usagePage(HidUsagePage.Keyboard)
+      usageMinimum(0)
+      usageMaximum(255)
+      logicalMinimum(0i8)
+      logicalMaximum(255i16)
+      reportCount(6)
+      reportSize(8)
+      input(hidData, hidArray, absolute=true)

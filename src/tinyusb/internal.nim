@@ -21,3 +21,8 @@ macro borrowSerialize*(typs: untyped): untyped =
 func hexRepr*(s: string): string =
   ## Mostly useful for debugging
   for c in s: result.add fmt"{c.uint8:02X} "
+
+
+func hexRepr*(a: openArray[uint8]): string =
+  ## Mostly useful for debugging
+  for b in a: result.add fmt"{b.uint8:02X} "
