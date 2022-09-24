@@ -131,3 +131,11 @@ suite "Validate descriptors against TinyUSB macros":
       tusbMouseReportDesc {.importc: "desc_hid_mouse_report".}: array[desclen, uint8]
     check:
       mouseReportDescriptor() == tusbMouseReportDesc.toString
+
+  test "TinyUSB HID Mouse Report Descriptor":
+    const descLen = 79
+    let
+      #tusbMouseReportDescLen {.importc: "desc_hid_mouse_report_size".}: csize_t
+      tusbMouseReportDesc {.importc: "desc_hid_mouseid_report".}: array[desclen, uint8]
+    check:
+      mouseReportDescriptor(69) == tusbMouseReportDesc.toString
