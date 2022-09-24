@@ -667,12 +667,16 @@ func abbreviate(item: HidShortItem): HidShortItem =
   result = item
   result.prefix.size = sz
 
-proc serialize(b: var string, item: HidShortItem) =
+proc serialize*(b: var string, item: HidShortItem) =
+  ## Create byte string for transmission over the wire of an HID report
+  ## descritor item.
   let abbv = abbreviate item
   b.add abbv.prefix.char
   for i in 0 ..< abbv.prefix.size: b.add abbv.data[i].char
 
-proc serialize(items: seq[HidShortItem]): string =
+proc serialize*(items: seq[HidShortItem]): string =
+  ## Create byte string for transmission over the wire of an HID report
+  ## descritor consisting of all items in `items`.
   for i in items:
     result.serialize(i)
 
@@ -952,46 +956,55 @@ func genAliases: seq[NimNode] {.compiletime.} =
       genAst(s=shortIdent, l=procIdent):
         template s(args: varargs[untyped]): auto = l(args)
 
-iterator rchildren(s: NimNode): NimNode =
-  var allChildren: seq[NimNode]
-  for child in s.children: allChildren.add child
-  for i in countdown(allChildren.high, allChildren.low):
-    yield allChildren[i]
+func addAlltoSeq(seqIdent: NimNode, items: seq[NimNode]): NimNode =
+  result = newStmtList()
+  result.add:
+    genAst(itemSeq=seqIdent):
+      var itemSeq: seq[HidShortItem]
+  for itemExpr in items:
+    result.add newCall("add", seqIdent, itemExpr)
 
-func flattenCollections(inner: NimNode): seq[NimNode] {.compiletime.} =
-  # Magic to handle collection: insert the collection children inside
-  # collection / end collection items.
-  var stack: seq[NimNode]
-  for node in inner.rchildren:
-    stack.add node
-  while stack.len > 0:
-    let snode = stack.pop
-    if snode.kind == nnkCall and eqIdent(snode[0], "collection"):
-        result.add newCall("hidReportDescItemCollection", snode[1])
-        stack.add newCall("hidReportDescItemEndCollection")
-        for colmember in snode[2].rchildren:
-          stack.add colmember
-    else:
-      result.add snode
+macro collection*(kind: static[HidCollectionKind], inner: untyped): untyped =
+  ## Meant for use inside the `hidReportDesc` macro. Inserts the items in
+  ## `inner`, wrapped in `Collection(kind)` and EndCollection items.
+  var itemStmts: seq[NimNode]
+  itemStmts.add newCall("hidReportDescItemCollection", kind.newLit)
+  for child in inner:
+    itemStmts.add child
+  itemStmts.add newCall("hidReportDescItemEndCollection")
+
+  let itemSeqSym = genSym(nskVar)
+  var blockbody = addAlltoSeq(itemSeqSym, itemStmts)
+  blockbody.add itemSeqSym
+  result = newBlockStmt(blockbody)
 
 macro hidReportDesc*(inner: untyped): string =
+  ## Create an HID report descriptor.
+  ## 
+  ## Each statement in `inner` must be either an `HidShortItem` object, or a
+  ## seq of `HidShortItem`. All items are concatenated in a flat manner and
+  ## serialized to a byte string.
+
   var blockbody = newStmtList()
-  for p in genAliases(): blockbody.add p
+  for p in genAliases():
+    blockbody.add p
 
-  # Build seq of HidShortItem objects from inner
-  let seqlit = block:
-    var brack = newNimNode(nnkBracket)
-    for elem in inner.flattenCollections:
-      brack.add elem
-    prefix(brack, "@")
+  let itemSeqSym = genSym(nskVar)
+  block:
+    var innerChildren: seq[NimNode]
+    for c in inner:
+      innerChildren.add c
+    addAlltoSeq(itemSeqSym, innerChildren).copyChildrenTo(blockbody)
 
-  blockbody.add:
-    genast(s = seqlit):
-      serialize(s)
-
+  blockbody.add newCall(bindsym"serialize", itemSeqSym)
   result = newBlockStmt(blockbody)
 
 func keyboardReportDescriptor*(id = -1): string =
+  ## Create HID report descriptor for a keyboard.
+  ## 
+  ## Meant to be used in conjunction with `KeyboardReport` and
+  ## `sendKeyboardReport`.
+
   hidReportDesc:
     usagePage(HidUsagePage.GenericDesktopControls)
     usage(hidUsageGenericDesktopControlsKeyboard.id)
