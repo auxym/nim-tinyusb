@@ -1003,12 +1003,14 @@ func keyboardReportDescriptor*(id = -1): string =
   ## Create HID report descriptor for a keyboard.
   ## 
   ## Meant to be used in conjunction with `KeyboardReport` and
-  ## `sendKeyboardReport`.
+  ## `sendKeyboardReport`. If `id` is greater than zero, a "Report ID" item
+  ## will be included, with the given ID, otherwise it is omitted.
 
   hidReportDesc:
     usagePage(HidUsagePage.GenericDesktopControls)
     usage(hidUsageGenericDesktopControlsKeyboard.id)
     collection(HidCollectionKind.Application):
+      # Optional Report ID
       if id > 0: @[reportId(id.uint8)] else: @[]
 
       # 8-bit bitfield for modifier keys
@@ -1048,3 +1050,62 @@ func keyboardReportDescriptor*(id = -1): string =
       reportCount(6)
       reportSize(8)
       input(hidData, hidArray, absolute=true)
+
+func mouseReportDescriptor*(id = -1): string =
+  ## Create HID report descriptor for a mouse.
+  ##
+  ## Meant to be used in conjunction with `MouseReport` and
+  ## `sendMouseReport`. If `id` is greater than zero, a "Report ID" item
+  ## will be included, with the given ID, otherwise it is omitted.
+
+  hidReportDesc:
+    usagePage(HidUsagePage.GenericDesktopControls)
+    usage(hidUsageGenericDesktopControlsMouse.id)
+    collection(HidCollectionKind.Application):
+      # Optional Report ID
+      if id > 0: @[reportId(id.uint8)] else: @[]
+
+      usage(hidUsageGenericDesktopControlsPointer.id)
+      collection(HidCollectionKind.Physical):
+
+        # 5 buttons: left, right, middle, back, forward
+        usagePage(HidUsagePage.Buttons)
+        usageMinimum(1)
+        usageMaximum(5)
+        logicalMinimum(0i8)
+        logicalMaximum(1i8)
+        reportCount(5)
+        reportSize(1)
+        input(hidData, hidVariable, absolute=true)
+
+        # 3 bits padding for byte alignment
+        reportCount(1)
+        reportSize(3)
+        input(hidConstant)
+
+        # X, Y movement -127 to 127
+        usagePage(HidUsagePage.GenericDesktopControls)
+        usage(hidUsageGenericDesktopControlsDirectionX.id)
+        usage(hidUsageGenericDesktopControlsDirectionY.id)
+        logicalMinimum(-127i8)
+        logicalMaximum(127i8)
+        reportCount(2)
+        reportSize(8)
+        input(hidData, hidVariable, absolute=false)
+
+        # Vertical scroll wheel -127 to 127
+        usage(hidUsageGenericDesktopControlsWheel.id)
+        logicalMinimum(-127i8)
+        logicalMaximum(127i8)
+        reportCount(1)
+        reportSize(8)
+        input(hidData, hidVariable, absolute=false)
+
+        # Vertical scroll wheel -127 to 127
+        usagePage(HidUsagePage.Consumer)
+        usage(hidUsageConsumerACPan.id)
+        logicalMinimum(-127i8)
+        logicalMaximum(127i8)
+        reportCount(1)
+        reportSize(8)
+        input(hidData, hidVariable, absolute=false)
