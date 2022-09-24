@@ -30,6 +30,22 @@ func find(s, sub: string): int =
       return i
   return -1
 
+func fixKbDesc(desc: openArray[uint8]): string =
+  # Tinyusb KB report mostly matches the example KB report in HID spec v1.11,
+  # except for the keypress usage min item. TinyUSB keeps one extra trailing
+  # zero byte. Here we remove (abbreviate) this zero byte and set the size
+  # field in the item prefix to 1 instead of 2.
+  result = desc.toString
+  block:
+    let usgMax255Idx = result.find("\x2A\xFF\x00")
+    assert usgMax255Idx >= 0
+    let usgMaxNewPrefix = block:
+      var p = HidItemPrefix(0x2A)
+      p.size = 1
+      p
+    result[usgMax255Idx] = usgMaxNewPrefix.char
+    result.delete((usgMax255Idx + 2)..(usgMax255Idx + 2)) # remove 0 byte
+
 suite "Validate descriptors against TinyUSB macros":
 
   test "CDC interface descriptor":
@@ -98,25 +114,15 @@ suite "Validate descriptors against TinyUSB macros":
     let
       #tusbKbReportDescLen {.importc: "desc_hid_kb_report_size".}: csize_t
       tusbKbReportDesc {.importc: "desc_hid_kb_report".}: array[desclen, uint8]
-
-    # Tinyusb KB report mostly matches the example KB report in HID spec v1.11,
-    # except for the keypress usage min item. TinyUSB keeps one extra trailing
-    # zero byte. Here we remove (abbreviate) this zero byte and set the size
-    # field in the item prefix to 1 instead of 2.
-    var tusbReportStr = tusbKbReportDesc.toString
-    block:
-      let usgMax255Idx = tusbReportStr.find("\x2A\xFF\x00")
-      assert usgMax255Idx >= 0
-      let usgMaxNewPrefix = block:
-        var p = HidItemPrefix(0x2A)
-        p.size = 1
-        p
-      tusbReportStr[usgMax255Idx] = usgMaxNewPrefix.char
-      tusbReportStr.delete((usgMax255Idx + 2)..(usgMax255Idx + 2)) # remove 0 byte
-
-    # Now we can compare to our own KB report descriptor
     check:
-      keyboardReportDescriptor() == tusbReportStr
+      keyboardReportDescriptor() == fixKbDesc(tusbKbReportDesc)
+
+  test "TinyUSB HID Keyboard Report Descriptor with Report ID":
+    const descLen = 67
+    let
+      tusbKbReportDesc {.importc: "desc_hid_kbid_report".}: array[desclen, uint8]
+    check:
+      keyboardReportDescriptor(id=69) == fixKbDesc(tusbKbReportDesc)
 
   test "TinyUSB HID Mouse Report Descriptor":
     const descLen = 77

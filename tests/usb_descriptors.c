@@ -47,11 +47,12 @@ uint8_t const desc_hid_report[] =
 };
 size_t const desc_hid_report_size = sizeof(desc_hid_report);
 
-uint8_t const desc_hid_kb_report[] =
-{
-  TUD_HID_REPORT_DESC_KEYBOARD()
-};
+uint8_t const desc_hid_kb_report[] = {TUD_HID_REPORT_DESC_KEYBOARD()};
 size_t const desc_hid_kb_report_size = sizeof(desc_hid_kb_report);
+
+uint8_t const desc_hid_kbid_report[] = {
+  TUD_HID_REPORT_DESC_KEYBOARD(HID_REPORT_ID(69))
+};
 
 uint8_t const desc_hid_mouse_report[] =
 {

@@ -1009,6 +1009,8 @@ func keyboardReportDescriptor*(id = -1): string =
     usagePage(HidUsagePage.GenericDesktopControls)
     usage(hidUsageGenericDesktopControlsKeyboard.id)
     collection(HidCollectionKind.Application):
+      if id > 0: @[reportId(id.uint8)] else: @[]
+
       # 8-bit bitfield for modifier keys
       usagePage(HidUsagePage.Keyboard)
       usageMinimum(224)
