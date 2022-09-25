@@ -45,8 +45,29 @@ uint8_t const desc_hid_report[] =
   TUD_HID_REPORT_DESC_MOUSE   ( HID_REPORT_ID(REPORT_ID_MOUSE            )),
   TUD_HID_REPORT_DESC_GAMEPAD ( HID_REPORT_ID(REPORT_ID_GAMEPAD          ))
 };
+size_t const desc_hid_report_size = sizeof(desc_hid_report);
 
-uint16_t const desc_hid_report_size = sizeof(desc_hid_report);
+uint8_t const desc_hid_kb_report[] = {TUD_HID_REPORT_DESC_KEYBOARD()};
+size_t const desc_hid_kb_report_size = sizeof(desc_hid_kb_report);
+
+uint8_t const desc_hid_kbid_report[] =
+{
+  TUD_HID_REPORT_DESC_KEYBOARD(HID_REPORT_ID(69))
+};
+
+uint8_t const desc_hid_mouse_report[] = { TUD_HID_REPORT_DESC_MOUSE() };
+uint8_t const desc_hid_mouseid_report[] = 
+{
+  TUD_HID_REPORT_DESC_MOUSE (HID_REPORT_ID(69)),
+};
+size_t const desc_hid_mouse_report_size = sizeof(desc_hid_mouse_report);
+
+uint8_t const desc_hid_gp_report[] = { TUD_HID_REPORT_DESC_GAMEPAD() };
+uint8_t const desc_hid_gpid_report[] =
+{
+  TUD_HID_REPORT_DESC_GAMEPAD (HID_REPORT_ID(69)),
+};
+size_t const desc_hid_gp_report_size = sizeof(desc_hid_gp_report);
 
 //--------------------------------------------------------------------+
 // Configuration Descriptor

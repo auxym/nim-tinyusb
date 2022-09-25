@@ -1,5 +1,13 @@
+import std/bitops
+import std/macros
+import std/genasts
+import std/strutils
+
 import ../descriptors
 import ../internal
+import ./hid_usages
+
+export hid_usages
 
 # HID Device API
 
@@ -489,7 +497,7 @@ func initHidDescriptor*(numDesc: uint8, reportDescType: HidDescriptorType,
 func initCompleteHidInterface*(itf: InterfaceNumber, reportDescLen: uint16,
                                epIn: EpNumber, epInSize: EpSize,
                                epInterval: uint8,
-                               bootProtocol: HidBootProtocol = HidBootProtocol.None, 
+                               bootProtocol: HidBootProtocol = HidBootProtocol.None,
                                str: StringIndex = StringIndexNone
                                ): CompleteHidInterfaceDescriptor =
   let sub = block:
@@ -518,3 +526,635 @@ func initCompleteHidInterface*(itf: InterfaceNumber, reportDescLen: uint16,
     )
 
   )
+
+# Report Descriptors
+
+type
+  HidItemPrefix* = distinct uint8
+
+  HidShortItemData* = array[4, uint8]
+
+  HidShortItem* = object
+    prefix*: HidItemPrefix
+    data*: HidShortItemData
+
+  HidReportDescriptor* = seq[HidShortItem]
+
+  HidItemType* {.pure.} = enum
+    Main, Global, Local
+
+  HidGlobalItemTag* {.pure.} = enum
+    UsagePage = 0b0000
+    LogicalMinimum = 0b0001
+    LogicalMaximum = 0b0010
+    PhysicalMinimum = 0b0011
+    PhysicalMaximum = 0b0100
+    UnitExponent = 0b0101
+    Unit = 0b0110
+    ReportSize = 0b0111
+    ReportId = 0b1000
+    ReportCount = 0b1001
+    Push = 0b1010
+    Pop = 0b1011
+
+  HidMainItemTag* {.pure.} = enum
+    Input = 0b1000
+    Output = 0b1001
+    Collection = 0b1010
+    Feature = 0b1011
+    EndCollection = 0b1100
+
+  HidLocalItemTag* {.pure.} = enum
+    Usage = 0b0000
+    UsageMinimum = 0b0001
+    UsageMaximum = 0b0010
+    DesignatorIndex = 0b0011
+    DesignatorMinimum = 0b0100
+    DesignatorMaximum = 0b0101
+    StringIndex = 0b0111
+    StringMinimum = 0b1000
+    StringMaximum = 0b1001
+    Delimiter = 0b1010
+
+  HidCollectionKind* {.pure.} = enum
+    Physical = 0x00
+    Application = 0x01
+    Logical = 0x02
+    Report = 0x03
+    NamedArray = 0x04
+    UsageSwitch = 0x05
+    UsageModifier = 0x06
+
+  ShortItemSizeCode = distinct range[0'u8..3'u8]
+
+  HidDataConstant* = enum hidData, hidConstant
+
+  HidArrayVariable* = enum hidArray, hidVariable
+
+  HidBitFieldBuffered* = enum hidBitfield, hidBufferedBytes
+
+  # HidUnitSystem and HidExp are used for the Unit item in report descriptors
+  HidUnitSystem* {.pure.} = enum
+    None, SiLinear, SiRotation, EnglishLinear, EnglishRotation
+
+  HidExp* = range[-8'i8..7'i8]
+
+template toSizeCode(x: 0..4): ShortItemSizeCode =
+  ShortItemSizeCode [0'u8, 1, 2, 255, 3][x]
+
+func itemType(item: HidShortItem): HidItemType =
+  HidItemType(item.prefix.uint8.bitsliced(2..3))
+
+func tag(item: HidShortItem): uint8 =
+  item.prefix.uint8.bitsliced(4..7)
+
+func size*(p: HidItemPrefix): 0..4 =
+  result = p.uint8.bitsliced(0..1)
+  if result == 3: result = 4
+
+proc `size=`*(p: var HidItemPrefix, size: 0..4) =
+  var tmp = p.uint8
+  tmp.clearMask(0..1)
+  tmp = tmp or size.toSizeCode.uint8
+  p = tmp.HidItemPrefix
+
+func abbreviate(item: HidShortItem): HidShortItem =
+  ## Reduce the size code in the item prefix when possible.
+  ## HID spec specifies that trailing zero bytes can be omitted is some cases.
+
+  # HID spec v1.11 allows abbreviating down to 0 bytes, but the examples
+  # always keep at least 1 byte, so do the same thing.
+  const minSize = 1
+  if item.prefix.size <= minSize: return item
+
+  # According to HID Usage Tables v 1.3 section 3.1, usage-related tags have
+  # different interpretations based on their size, therefore:
+  #   - Usage of size 2 bytes denotes an id can be abbreviated to 1
+  #   - Usage of size 4 should never be abbreviated as it denotes a combined
+  #     usage id and usage page.
+  const localItemUsageTags = {
+    HidLocalItemTag.Usage.ord,
+    HidLocalItemTag.UsageMaximum.ord,
+    HidLocalItemTag.UsageMinimum.ord
+  }
+  if item.itemType == HidItemType.Local and
+      item.tag in localItemUsageTags and
+      item.prefix.size == 4:
+    return item
+
+  # Never abbreviate items when the data is to be interpreted as signed. For example,
+  # int16(0x00FF) is +255, but would be interpreted as a negative number (int8) if
+  # it was abbreviated to 0xFF.
+  #
+  # Note: we could make a smart algorithm here that abbreviates to the smallest
+  # signed type that can represent the value. But the user can also manually specify
+  # the constant of the right type when creating the item.
+  const signedDataTags = {
+    HidGlobalItemTag.LogicalMinimum.ord, HidGlobalItemTag.LogicalMaximum.ord,
+    HidGlobalItemTag.PhysicalMaximum.ord, HidGlobalItemTag.PhysicalMinimum.ord,
+    HidGlobalItemTag.UnitExponent.ord
+  }
+  # Note: all local and main items are always unsigned.
+  if item.itemType == HidItemType.Global and item.tag in signedDataTags:
+    return item
+
+  # abbreviate: count nonzero bytes and update result size field accordingly
+  var sz = item.prefix.size
+  while sz > minSize and item.data[sz - 1] == 0:
+    dec sz
+  # length of data array can only be 0, 1, 2, 4
+  if sz == 3: sz = 4
+  result = item
+  result.prefix.size = sz
+
+proc serialize*(b: var string, item: HidShortItem) =
+  ## Create byte string for transmission over the wire of an HID report
+  ## descritor item.
+  let abbv = abbreviate item
+  b.add abbv.prefix.char
+  for i in 0 ..< abbv.prefix.size: b.add abbv.data[i].char
+
+proc serialize*(items: seq[HidShortItem]): string =
+  ## Create byte string for transmission over the wire of an HID report
+  ## descritor consisting of all items in `items`.
+  for i in items:
+    result.serialize(i)
+
+func initPrefix(size: 0..4, typ: HidItemType, tag:0..0b1111): HidItemPrefix =
+  var p: uint8
+  p = p or ((typ.ord.uint8 and 0b11) shl 2)
+  p = p or ((tag.uint8 and 0b1111) shl 4)
+  result = p.HidItemPrefix
+  result.size = size
+
+template setbitTo[T: SomeUnsignedInt](x: var T, bit: Natural, val: 0..1) =
+  clearbit x, bit
+  x = x or (T(val) shl bit)
+
+type HidSignedInt = (int8 | int16 | int32)
+type HidInt = (int8 | int16 | int32 | uint8 | uint16 | uint32)
+
+template copyLEBytes(x: (int8 | uint8), dest: var HidShortItemData) =
+  dest[0] = (0xFF and x).uint8
+
+template copyLEBytes(x: (int16 | uint16), dest: var HidShortItemData) =
+  dest[0] = x.bitsliced(0..7).uint8
+  dest[1] = x.bitsliced(8..15).uint8
+
+template copyLEBytes(x: (int32 | uint32), dest: var HidShortItemData) =
+  dest[0] = x.bitsliced(0..7).uint8
+  dest[1] = x.bitsliced(8..15).uint8
+  dest[2] = x.bitsliced(16..23).uint8
+  dest[3] = x.bitsliced(24..32).uint8
+
+func globalItem[T: HidInt](tag: HidGlobalItemTag, data: T): HidShortItem =
+  result.prefix = initPrefix(sizeof(T), HidItemType.Global, tag.ord)
+  copyLEBytes(data, result.data)
+
+func globalItem(tag: HidGlobalItemTag): HidShortItem =
+  result.prefix = initPrefix(0, HidItemType.Global, tag.ord)
+
+func localItem[T: HidInt](tag: HidLocalItemTag, data: T): HidShortItem =
+  result.prefix = initPrefix(sizeof(T), HidItemType.Local, tag.ord)
+  copyLEBytes(data, result.data)
+
+func mainItem(tag: HidMainItemTag, data: uint16): HidShortItem =
+  result.prefix = initPrefix(2, HidItemType.Main, tag.ord)
+  copyLEBytes(data, result.data)
+
+func mainItem(tag: HidMainItemTag): HidShortItem =
+  ## Main item without any data
+  HidShortItem(prefix: initPrefix(0, HidItemType.Main, tag.ord))
+
+func inputOutputFeatureData(
+    dataOrConst: HidDataConstant, arrayVar: HidArrayVariable,
+    absolute, wrap, linear, hasPreferredState, volatile, hasNullState: bool,
+    bitfield: HidBitFieldBuffered
+    ): uint16 =
+  result.setBitTo(0, dataOrConst.ord)
+  result.setBitTo(1, arrayVar.ord)
+  if not absolute: result.setBit(2)
+  if wrap: result.setBit(3)
+  if not linear: result.setbit(4)
+  if not hasPreferredState: result.setbit(5)
+  if hasNullState: result.setbit(6)
+  if volatile: result.setbit(7)
+  result.setBitTo(8, bitfield.ord)
+
+func hidReportDescItemCollection*(kind: HidCollectionKind): HidShortItem =
+  mainItem(HidMainItemTag.Collection, kind.ord.uint16)
+
+func hidReportDescItemEndCollection*: HidShortItem =
+  result = mainItem(HidMainItemTag.EndCollection)
+
+func hidReportDescItemInput*(
+    dataOrConst: HidDataConstant = hidData,
+    arrayVar: HidArrayVariable = hidArray,
+    absolute=true,
+    wrap=false,
+    linear=true,
+    hasPreferredState=true,
+    hasNullState=false,
+    bitfield: HidBitFieldBuffered = hidBitfield
+    ): HidShortItem =
+
+  ## Generate Input item in HID report descriptor
+  ## Note: the default value of each argument maps to a 0 in the data bitmap
+
+  let data = inputOutputFeatureData(
+    dataOrConst, arrayVar, absolute, wrap, linear, hasPreferredState, hasNullState,
+    false, bitfield
+  )
+  result = mainItem(HidMainItemTag.Input, data)
+
+func hidReportDescItemOutput*(
+    dataOrConst: HidDataConstant = hidData,
+    arrayVar: HidArrayVariable = hidArray,
+    absolute=true,
+    wrap=false,
+    linear=true,
+    hasPreferredState=true,
+    hasNullState=false,
+    volatile=false,
+    bitfield: HidBitFieldBuffered = hidBitfield
+    ): HidShortItem =
+  ## Generate Output item in HID report descriptor
+  ## Note: the default value of each argument maps to a 0 in the data bitmap
+
+  let data = inputOutputFeatureData(
+    dataOrConst, arrayVar, absolute, wrap, linear, hasPreferredState, hasNullState,
+    volatile, bitfield
+  )
+  result = mainItem(HidMainItemTag.Output, data)
+
+func hidReportDescItemFeature*(
+    dataOrConst: HidDataConstant = hidData,
+    arrayVar: HidArrayVariable = hidArray,
+    absolute=true,
+    wrap=false,
+    linear=true,
+    hasPreferredState=true,
+    hasNullState=false,
+    volatile=false,
+    bitfield: HidBitFieldBuffered = hidBitfield
+    ): HidShortItem =
+  ## Generate a Feature item in HID report descriptor
+  ## Note: the default value of each argument maps to a 0 in the data bitmap
+  let data = inputOutputFeatureData(
+    dataOrConst, arrayVar, absolute, wrap, linear, hasPreferredState, hasNullState,
+    volatile, bitfield
+  )
+  result = mainItem(HidMainItemTag.Feature, data)
+
+func hidReportDescItemUsagePage*(page: HidUsagePage): HidShortItem =
+  globalItem(HidGlobalItemTag.UsagePage, page.ord.uint16)
+
+func hidReportDescItemLogicalMinimum*[T: HidSignedInt](x: T): HidShortItem =
+  globalItem(HidGlobalItemTag.LogicalMinimum, x)
+
+func hidReportDescItemLogicalMaximum*[T: HidSignedInt](x: T): HidShortItem =
+  globalItem(HidGlobalItemTag.LogicalMaximum, x)
+
+func hidReportDescItemPhysicalMinimum*[T: HidSignedInt](x: T): HidShortItem =
+  globalItem(HidGlobalItemTag.PhysicalMinimum, x)
+
+func hidReportDescItemPhysicalMaximum*[T: HidSignedInt](x: T): HidShortItem =
+  globalItem(HidGlobalItemTag.PhysicalMaximum, x)
+
+func hidReportDescItemUnitExponent*[T: HidSignedInt](x: T): HidShortItem =
+  globalItem(HidGlobalItemTag.UnitExponent, x)
+
+func hidReportDescItemUnit*(sys: HidUnitSystem, length, mass, time, temp,
+                           current, lum: HidExp = 0): HidShortItem =
+  var u = sys.ord.uint32
+  u = u or ((0x0F and length)  shl 4).uint32
+  u = u or ((0x0F and mass)    shl 8).uint32
+  u = u or ((0x0F and time)    shl 12).uint32
+  u = u or ((0x0F and temp)    shl 16).uint32
+  u = u or ((0x0F and current) shl 20).uint32
+  u = u or ((0x0F and lum)     shl 24).uint32
+  result = globalItem(HidGlobalItemTag.Unit, u)
+
+func hidReportDescItemReportSize*(bits: uint32): HidShortItem =
+  ## Set size of each report field in bits
+  globalItem(HidGlobalItemTag.ReportSize, bits)
+
+func hidReportDescItemReportId*(id: 1'u8..uint8.high): HidShortItem =
+  ## Report ID for descriptors with multiple reports
+  globalItem(HidGlobalItemTag.ReportId, id)
+
+func hidReportDescItemReportCount*(count: uint32): HidShortItem =
+  ## Set number of fields in report
+  globalItem(HidGlobalItemTag.ReportCount, count)
+
+func hidReportDescItemPush*: HidShortItem =
+  ## Instruct the report descriptor parser to push the current global item
+  ## state to a stack.
+  globalItem(HidGlobalItemTag.Push)
+
+func hidReportDescItemPop*: HidShortItem =
+  ## Instruct the report descriptor parser to replace the current global item
+  ## state with the structure currently on top of the stack.
+  globalItem(HidGlobalItemTag.Pop)
+
+proc toUint32(u: HidUsage): uint32 =
+  u.id.uint32 or (u.page.ord.uint32 shl 8)
+
+func hidReportDescItemUsage*(u: HidUsage): HidShortItem =
+  ## Set the fully qualified (page + id)  usage
+  localItem(HidLocalItemTag.Usage, u.toUint32)
+
+func hidReportDescItemUsage*(id: uint16): HidShortItem =
+  ## Set the usage id to be concatenated with the previously set Usage Page
+  localItem(HidLocalItemTag.Usage, id)
+
+func hidReportDescItemUsageMinimum*(u: HidUsage): HidShortItem =
+  ## Defines the starting usage id associated with an array or bitmap.
+  localItem(HidLocalItemTag.UsageMinimum, u.toUint32)
+
+func hidReportDescItemUsageMinimum*(id: uint16): HidShortItem =
+  ## Defines the starting usage id associated with an array or bitmap.
+  localItem(HidLocalItemTag.UsageMinimum, id)
+
+func hidReportDescItemUsageMaximum*(u: HidUsage): HidShortItem =
+  ## Defines the starting usage id associated with an array or bitmap.
+  localItem(HidLocalItemTag.UsageMaximum, u.toUint32)
+
+func hidReportDescItemUsageMaximum*(id: uint16): HidShortItem =
+  ## Defines the starting usage id associated with an array or bitmap.
+  localItem(HidLocalItemTag.UsageMaximum, id)
+
+func hidReportDescItemDesignatorIndex*(id: uint16): HidShortItem =
+  ## Determines the body part used for a control. Index points to a designator
+  ## in the Physical descriptor.
+  localItem(HidLocalItemTag.DesignatorIndex, id)
+
+func hidReportDescItemDesignatorMinimum*(id: uint16): HidShortItem =
+  ## Defines the index of the starting designator associated with an array or
+  ## bitmap.
+  localItem(HidLocalItemTag.DesignatorMinimum, id)
+
+func hidReportDescItemDesignatorMaximum*(id: uint16): HidShortItem =
+  ## Defines the index of the ending designator associated with an array or
+  ## bitmap.
+  localItem(HidLocalItemTag.DesignatorMaximum, id)
+
+func hidReportDescItemStringIndex*(id: StringIndex): HidShortItem =
+  localItem(HidLocalItemTag.StringIndex, id.uint8)
+
+func hidReportDescItemStringMinimum*(id: StringIndex): HidShortItem =
+  localItem(HidLocalItemTag.StringMinimum, id.uint8)
+
+func hidReportDescItemStringMaximum*(id: StringIndex): HidShortItem =
+  localItem(HidLocalItemTag.StringMaximum, id.uint8)
+
+func hidReportDescItemDelimiter*(x: 0'u8..1'u8): HidShortItem =
+  localItem(HidLocalItemTag.Delimiter, x)
+
+macro idents2Nodes(ids: varargs[untyped]): untyped =
+  var brack = nnkBracket.newTree
+  for node in ids:
+    let name = $node
+    brack.add:
+      genAst(name):
+        ident(name)
+  result = brack
+
+func genAliases: seq[NimNode] {.compiletime.} =
+  let allItemProcs = idents2Nodes(
+    hidReportDescItemInput,
+    hidReportDescItemOutput,
+    hidReportDescItemUsagePage,
+    hidReportDescItemLogicalMaximum,
+    hidReportDescItemLogicalMinimum,
+    hidReportDescItemPhysicalMaximum,
+    hidReportDescItemPhysicalMinimum,
+    hidReportDescItemUnit,
+    hidReportDescItemUnitExponent,
+    hidReportDescItemReportSize,
+    hidReportDescItemReportId,
+    hidReportDescItemReportCount,
+    hidReportDescItemReportPush,
+    hidReportDescItemReportPop,
+    hidReportDescItemUsage,
+    hidReportDescItemUsageMinimum,
+    hidReportDescItemUsageMaximum,
+    hidReportDescItemDesignatorIndex,
+    hidReportDescItemDesignatorMinimum,
+    hidReportDescItemDesignatorMaximum,
+    hidReportDescItemStringIndex,
+    hidReportDescItemStringMinimum,
+    hidReportDescItemStringMaximum,
+    hidReportDescItemStringDelimiter,
+  )
+  for procIdent in allItemProcs:
+    let shortIdent = block:
+      var s = ($procIdent).replace("hidReportDescItem", "")
+      s[0] = s[0].toLowerAscii
+      ident s
+    result.add:
+      genAst(s=shortIdent, l=procIdent):
+        template s(args: varargs[untyped]): auto = l(args)
+
+func addAlltoSeq(seqIdent: NimNode, items: seq[NimNode]): NimNode =
+  result = newStmtList()
+  result.add:
+    genAst(itemSeq=seqIdent):
+      var itemSeq: seq[HidShortItem]
+  for itemExpr in items:
+    result.add newCall("add", seqIdent, itemExpr)
+
+macro collection*(kind: static[HidCollectionKind], inner: untyped): untyped =
+  ## Meant for use inside the `hidReportDesc` macro. Inserts the items in
+  ## `inner`, wrapped in `Collection(kind)` and EndCollection items.
+  var itemStmts: seq[NimNode]
+  itemStmts.add newCall("hidReportDescItemCollection", kind.newLit)
+  for child in inner:
+    itemStmts.add child
+  itemStmts.add newCall("hidReportDescItemEndCollection")
+
+  let itemSeqSym = genSym(nskVar)
+  var blockbody = addAlltoSeq(itemSeqSym, itemStmts)
+  blockbody.add itemSeqSym
+  result = newBlockStmt(blockbody)
+
+macro hidReportDesc*(inner: untyped): string =
+  ## Create an HID report descriptor.
+  ## 
+  ## Each statement in `inner` must be either an `HidShortItem` object, or a
+  ## seq of `HidShortItem`. All items are concatenated in a flat manner and
+  ## serialized to a byte string.
+
+  var blockbody = newStmtList()
+  for p in genAliases():
+    blockbody.add p
+
+  let itemSeqSym = genSym(nskVar)
+  block:
+    var innerChildren: seq[NimNode]
+    for c in inner:
+      innerChildren.add c
+    addAlltoSeq(itemSeqSym, innerChildren).copyChildrenTo(blockbody)
+
+  blockbody.add newCall(bindsym"serialize", itemSeqSym)
+  result = newBlockStmt(blockbody)
+
+func keyboardReportDescriptor*(id = -1): string =
+  ## Create HID report descriptor for a keyboard.
+  ## 
+  ## Meant to be used in conjunction with `KeyboardReport` and
+  ## `sendKeyboardReport`. If `id` is greater than zero, a "Report ID" item
+  ## will be included, with the given ID, otherwise it is omitted.
+
+  hidReportDesc:
+    usagePage(HidUsagePage.GenericDesktopControls)
+    usage(hidUsageGenericDesktopControlsKeyboard.id)
+    collection(HidCollectionKind.Application):
+      # Optional Report ID
+      if id > 0: @[reportId(id.uint8)] else: @[]
+
+      # 8-bit bitfield for modifier keys
+      usagePage(HidUsagePage.Keyboard)
+      usageMinimum(224)
+      usageMaximum(231)
+      logicalMinimum(0i8)
+      logicalMaximum(1i8)
+      reportCount(8)
+      reportSize(1)
+      input(hidData, hidVariable, absolute=true)
+
+      # 8 bits padding (?)
+      reportCount(1)
+      reportSize(8)
+      input(hidConstant)
+
+      # 5-bit output report to set LEDs
+      usagePage(HidUsagePage.LEDs)
+      usageMinimum(1)
+      usageMaximum(5)
+      reportCount(5)
+      reportSize(1)
+      output(hidData, hidVariable, absolute=true)
+
+      # 3 bits padding for byte alignment
+      reportCount(1)
+      reportSize(3)
+      output(hidConstant)
+
+      # 6X 1-byte keycode
+      usagePage(HidUsagePage.Keyboard)
+      usageMinimum(0)
+      usageMaximum(255)
+      logicalMinimum(0i8)
+      logicalMaximum(255i16)
+      reportCount(6)
+      reportSize(8)
+      input(hidData, hidArray, absolute=true)
+
+func mouseReportDescriptor*(id = -1): string =
+  ## Create HID report descriptor for a mouse.
+  ##
+  ## Meant to be used in conjunction with `MouseReport` and
+  ## `sendMouseReport`. If `id` is greater than zero, a "Report ID" item
+  ## will be included, with the given ID, otherwise it is omitted.
+
+  hidReportDesc:
+    usagePage(HidUsagePage.GenericDesktopControls)
+    usage(hidUsageGenericDesktopControlsMouse.id)
+    collection(HidCollectionKind.Application):
+      # Optional Report ID
+      if id > 0: @[reportId(id.uint8)] else: @[]
+
+      usage(hidUsageGenericDesktopControlsPointer.id)
+      collection(HidCollectionKind.Physical):
+
+        # 5 buttons: left, right, middle, back, forward
+        usagePage(HidUsagePage.Buttons)
+        usageMinimum(1)
+        usageMaximum(5)
+        logicalMinimum(0i8)
+        logicalMaximum(1i8)
+        reportCount(5)
+        reportSize(1)
+        input(hidData, hidVariable, absolute=true)
+
+        # 3 bits padding for byte alignment
+        reportCount(1)
+        reportSize(3)
+        input(hidConstant)
+
+        # X, Y movement -127 to 127
+        usagePage(HidUsagePage.GenericDesktopControls)
+        usage(hidUsageGenericDesktopControlsDirectionX.id)
+        usage(hidUsageGenericDesktopControlsDirectionY.id)
+        logicalMinimum(-127i8)
+        logicalMaximum(127i8)
+        reportCount(2)
+        reportSize(8)
+        input(hidData, hidVariable, absolute=false)
+
+        # Vertical scroll wheel -127 to 127
+        usage(hidUsageGenericDesktopControlsWheel.id)
+        logicalMinimum(-127i8)
+        logicalMaximum(127i8)
+        reportCount(1)
+        reportSize(8)
+        input(hidData, hidVariable, absolute=false)
+
+        # Vertical scroll wheel -127 to 127
+        usagePage(HidUsagePage.Consumer)
+        usage(hidUsageConsumerACPan.id)
+        logicalMinimum(-127i8)
+        logicalMaximum(127i8)
+        reportCount(1)
+        reportSize(8)
+        input(hidData, hidVariable, absolute=false)
+
+func gamepadReportDescriptor*(id = -1): string =
+  ## Create HID report descriptor for a gamepad.
+  ##
+  ## Meant to be used in conjunction with `sendGamepadReport`. If `id` is
+  ## greater than zero, a "Report ID" item will be included, with the given ID,
+  ## otherwise it is omitted.
+
+  hidReportDesc:
+    usagePage(HidUsagePage.GenericDesktopControls)
+    usage(hidUsageGenericDesktopControlsGamepad.id)
+    collection(HidCollectionKind.Application):
+      # Optional Report ID
+      if id > 0: @[reportId(id.uint8)] else: @[]
+
+      # 1-byte X, Y, Z, RX, RY, RZ, [127, -127]
+      usagePage(HidUsagePage.GenericDesktopControls)
+      usage(hidUsageGenericDesktopControlsDirectionX.id)
+      usage(hidUsageGenericDesktopControlsDirectionY.id)
+      usage(hidUsageGenericDesktopControlsDirectionZ.id)
+      usage(hidUsageGenericDesktopControlsRotateZ.id)
+      usage(hidUsageGenericDesktopControlsRotateX.id)
+      usage(hidUsageGenericDesktopControlsRotateY.id)
+      logicalMinimum(-127i8)
+      logicalMaximum(127i8)
+      reportCount(6)
+      reportSize(8)
+      input(hidData, hidVariable, absolute=true)
+
+      # 8-bit D-Pad / Hat button map
+      usagePage(HidUsagePage.GenericDesktopControls)
+      usage(hidUsageGenericDesktopControlsHatSwitch.id)
+      logicalMinimum(1i8)
+      logicalMaximum(8i8)
+      physicalMinimum(0i8)
+      physicalMaximum(315i16)
+      reportCount(1)
+      reportSize(8)
+      input(hidData, hidVariable, absolute=true)
+
+      # 32-bit button map
+      usagePage(HidUsagePage.Buttons)
+      usageMinimum(1)
+      usageMaximum(32)
+      logicalMinimum(0i8)
+      logicalMaximum(1i8)
+      reportCount(32)
+      reportSize(1)
+      input(hidData, hidVariable, absolute=true)
