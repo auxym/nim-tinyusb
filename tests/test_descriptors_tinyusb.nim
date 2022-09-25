@@ -132,10 +132,28 @@ suite "Validate descriptors against TinyUSB macros":
     check:
       mouseReportDescriptor() == tusbMouseReportDesc.toString
 
-  test "TinyUSB HID Mouse Report Descriptor":
+  test "TinyUSB HID Mouse Report Descriptor with report ID":
     const descLen = 79
     let
       #tusbMouseReportDescLen {.importc: "desc_hid_mouse_report_size".}: csize_t
       tusbMouseReportDesc {.importc: "desc_hid_mouseid_report".}: array[desclen, uint8]
     check:
       mouseReportDescriptor(69) == tusbMouseReportDesc.toString
+
+  test "TinyUSB HID Gamepad Report Descriptor":
+    const descLen = 66
+    let
+      #tusbGpReportDescLen {.importc: "desc_hid_gp_report_size".}: csize_t
+      tusbGpReportDesc {.importc: "desc_hid_gp_report".}: array[desclen, uint8]
+    #echo tusbGpReportDescLen
+    check:
+      gamepadReportDescriptor() == tusbGpReportDesc.toString
+
+  test "TinyUSB HID Gamepad Report Descriptor with report ID":
+    const descLen = 68
+    let
+      #tusbGpReportDescLen {.importc: "desc_hid_gp_report_size".}: csize_t
+      tusbGpIdReportDesc {.importc: "desc_hid_gpid_report".}: array[desclen, uint8]
+    #echo tusbGpReportDescLen
+    check:
+      gamepadReportDescriptor(69) == tusbGpIdReportDesc.toString

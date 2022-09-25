@@ -62,6 +62,13 @@ uint8_t const desc_hid_mouseid_report[] =
 };
 size_t const desc_hid_mouse_report_size = sizeof(desc_hid_mouse_report);
 
+uint8_t const desc_hid_gp_report[] = { TUD_HID_REPORT_DESC_GAMEPAD() };
+uint8_t const desc_hid_gpid_report[] =
+{
+  TUD_HID_REPORT_DESC_GAMEPAD (HID_REPORT_ID(69)),
+};
+size_t const desc_hid_gp_report_size = sizeof(desc_hid_gp_report);
+
 //--------------------------------------------------------------------+
 // Configuration Descriptor
 //--------------------------------------------------------------------+

@@ -1109,3 +1109,52 @@ func mouseReportDescriptor*(id = -1): string =
         reportCount(1)
         reportSize(8)
         input(hidData, hidVariable, absolute=false)
+
+func gamepadReportDescriptor*(id = -1): string =
+  ## Create HID report descriptor for a gamepad.
+  ##
+  ## Meant to be used in conjunction with `sendGamepadReport`. If `id` is
+  ## greater than zero, a "Report ID" item will be included, with the given ID,
+  ## otherwise it is omitted.
+
+  hidReportDesc:
+    usagePage(HidUsagePage.GenericDesktopControls)
+    usage(hidUsageGenericDesktopControlsGamepad.id)
+    collection(HidCollectionKind.Application):
+      # Optional Report ID
+      if id > 0: @[reportId(id.uint8)] else: @[]
+
+      # 1-byte X, Y, Z, RX, RY, RZ, [127, -127]
+      usagePage(HidUsagePage.GenericDesktopControls)
+      usage(hidUsageGenericDesktopControlsDirectionX.id)
+      usage(hidUsageGenericDesktopControlsDirectionY.id)
+      usage(hidUsageGenericDesktopControlsDirectionZ.id)
+      usage(hidUsageGenericDesktopControlsRotateZ.id)
+      usage(hidUsageGenericDesktopControlsRotateX.id)
+      usage(hidUsageGenericDesktopControlsRotateY.id)
+      logicalMinimum(-127i8)
+      logicalMaximum(127i8)
+      reportCount(6)
+      reportSize(8)
+      input(hidData, hidVariable, absolute=true)
+
+      # 8-bit D-Pad / Hat button map
+      usagePage(HidUsagePage.GenericDesktopControls)
+      usage(hidUsageGenericDesktopControlsHatSwitch.id)
+      logicalMinimum(1i8)
+      logicalMaximum(8i8)
+      physicalMinimum(0i8)
+      physicalMaximum(315i16)
+      reportCount(1)
+      reportSize(8)
+      input(hidData, hidVariable, absolute=true)
+
+      # 32-bit button map
+      usagePage(HidUsagePage.Buttons)
+      usageMinimum(1)
+      usageMaximum(32)
+      logicalMinimum(0i8)
+      logicalMaximum(1i8)
+      reportCount(32)
+      reportSize(1)
+      input(hidData, hidVariable, absolute=true)
