@@ -178,11 +178,11 @@ const CfgTemplate = """
 #endif
 
 //------------- CLASS -------------//
-#define CFG_TUD_HID               [isHid]
-#define CFG_TUD_CDC               [isCdc]
-#define CFG_TUD_MSC               [isMsc]
-#define CFG_TUD_MIDI              [isMidi]
-#define CFG_TUD_VENDOR            [isVendor]
+#define CFG_TUD_HID               [hid]
+#define CFG_TUD_CDC               [cdc]
+#define CFG_TUD_MSC               [msc]
+#define CFG_TUD_MIDI              [midi]
+#define CFG_TUD_VENDOR            [vendor]
 
 // CDC FIFO size of TX and RX
 #define CFG_TUD_CDC_RX_BUFSIZE   [cdcRxBufSize]
@@ -201,19 +201,20 @@ const CfgTemplate = """
 #endif /* _TUSB_CONFIG_H_ */
 """
 
-proc configureUsbDevice*(mcu: TinyUsbMcu, os: TinyUsbOs, debug: bool,
-                classes: set[UsbClass], midi: bool = false, rhPort: Natural = 0,
-                memAlign: Natural = 4, memSection: string = "",
-                ep0size: Ep0MaxPacketSize=Ep0MaxPacketSize.Size64,
-                cdcRxBufSize, cdcTxBufSize, cdcEpBufSize: Natural = 64,
-                hidBufSize: Natural = 16,) {.compileTime.} =
+proc configureUsbDevice*(
+  mcu: TinyUsbMcu,
+  os: TinyUsbOs = TinyUsbOs.None,
+  debug: bool = false,
 
-  let
-    isHid = int(UsbClass.Hid in classes)
-    isCdc = int(UsbClass.Cdc in classes)
-    isMsc = int(UsbClass.Msc in classes)
-    isMidi = int(UsbClass.Audio in classes and midi)
-    isVendor = int(UsbClass.VendorSpecific in classes)
+  # Number of interfaces for each device class
+  hid, cdc, msc, midi, vendor: Natural = 0,
+
+  rhPort: Natural = 0,
+  memAlign: Natural = 4,
+  memSection: string = "",
+  ep0size: Ep0MaxPacketSize=Ep0MaxPacketSize.Size64,
+  cdcRxBufSize, cdcTxBufSize, cdcEpBufSize: Natural = 64,
+  hidBufSize: Natural = 16,) {.compileTime.} =
 
   let memSectionAttr =
     if memSection == "": ""

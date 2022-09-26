@@ -1,6 +1,13 @@
 import ../device
 import ../descriptors
 
+type CdcInstance* = distinct uint8
+  ## Represent the 0-based "instance index" of a CDC interface, based on the
+  ## order in which it appears in the configuration descriptor. Eg. the first
+  ## CDC interface is instance 0 and the second is instance 1, no matter the
+  ## actual interface number specified in the descriptors. See:
+  ## https://github.com/hathach/tinyusb/discussions/1239
+
 # CDC Device API
 
 {.push header: "tusb.h".}
@@ -33,7 +40,7 @@ proc cdcRead(itf: uint8; buffer: pointer; bufsize: uint32): uint32 {.importc: "t
 #proc cdcPeek*(itf: uint8; ui8: ptr uint8): bool {.importc: "tud_cdc_n_peek".}
 
 #  Write bytes to TX FIFO, data may remain in the FIFO for a while
-proc cdcWrite*(itf: uint8; buffer: pointer; bufsize: uint32): uint32 {.importc: "tud_cdc_n_write".}
+proc cdcWrite(itf: uint8; buffer: pointer; bufsize: uint32): uint32 {.importc: "tud_cdc_n_write".}
 
 #  Write a byte
 proc cdcWriteChar(itf: uint8; ch: char): uint32 {.inline, importc: "tud_cdc_n_write_char".}
@@ -51,88 +58,83 @@ proc cdcWriteFlush*(itf: uint8): uint32 {.importc: "tud_cdc_n_write_flush".}
 #proc cdcWriteClear*(itf: uint8): bool {.importc: "tud_cdc_n_write_clear".}
 {.pop}
 
-# Nim stream-like API for USB CDC (serial)
+# Exported Nim API
 
-type UsbSerialInterface* = distinct range[0'u8 .. 127'u8]
-## Used to represent the CDC interface number, as configured by `CFG_TUD_CDC`.
-## Eg. if `CFG_TUD_CDC` is `1`, then only `0.UsbSerialInterface` would be valid.
-## If `CFG_TUD_CDC` is `2`, then we could use `0.UsbSerialInterface` and
-## `1.UsbSerialInterface`.
-
-proc available*(itf: UsbSerialInterface): uint32 {.inline.} =
+proc available*(inst: CdcInstance): uint32 {.inline.} =
   ## Get the number of bytes available for reading
-  cdcAvailable(itf.uint8)
+  cdcAvailable(inst.uint8)
 
-proc atEnd*(itf: UsbSerialInterface): bool {.inline.} =
+proc atEnd*(inst: CdcInstance): bool {.inline.} =
   ## Returns `true` if there is currently no data available for reading.
-  cdcAvailable(itf.uint8) == 0
+  cdcAvailable(inst.uint8) == 0
 
-proc connected*(itf: UsbSerialInterface): bool {.inline.} =
-  ## Check if terminal is connected to this port
+proc connected*(inst: CdcInstance): bool {.inline.} =
+  ## Check if terminal is connected.
   ##
   ## Note: this actually checks for DTR bit, which is up to the host
   ## application to set.
-  cdcConnected(itf.uint8)
+  cdcConnected(inst.uint8)
 
-proc readBytes*(itf: UsbSerialInterface, n: Positive = 1): seq[uint8] {.inline.} =
-  ## Read up to `n` bytes from interface.
+proc readBytes*(inst: CdcInstance, n: Positive = 1): seq[uint8] {.inline.} =
+  ## Read up to `n` bytes.
   ##
   ## Note: the length of the returned seq may be lower if fewer bytes were
   ## actually read.
   result = newSeq[uint8](n)
-  let actualNumBytes = cdcRead(itf.uint8, result[0].unsafeAddr, n.uint32)
+  let actualNumBytes = cdcRead(inst.uint8, result[0].unsafeAddr, n.uint32)
   result.setLen(actualNumBytes)
 
-proc readString*(itf: UsbSerialInterface, n: Positive = 1): string {.inline.} =
-  ## Read a string of up to `n` characters from interface.
+proc readString*(inst: CdcInstance, n: Positive = 1): string {.inline.} =
+  ## Read a string of up to `n` characters.
   ##
   ## Note: the length of the returned string may be lower if fewer bytes were
   ## actually read.
   result = newString(n)
-  let actualNumBytes = cdcRead(itf.uint8, result[0].unsafeAddr, n.uint32)
+  let actualNumBytes = cdcRead(inst.uint8, result[0].unsafeAddr, n.uint32)
   result.setLen(actualNumBytes)
 
-template writeData(itf: uint8, data: string or openArray[uint8]) =
+func writeData(inst: uint8, data: string or openArray[uint8]) {.inline.} =
+  ## Internal helper
   var
     i = 0
     remain = data.len
-  while remain > 0 and cdcConnected(itf):
+  while remain > 0 and cdcConnected(inst):
     let buffer = data[i].unsafeAddr
-    let wrcount = cdcWrite(itf, buffer, remain.uint32).int
+    let wrcount = cdcWrite(inst, buffer, remain.uint32).int
     i.inc wrcount
     remain.dec wrcount
     usbDeviceTask()
-    discard cdcWriteFlush(itf)
+    discard cdcWriteFlush(inst)
 
-proc write*(itf: UsbSerialInterface, s: string) {.inline.} =
-  ## Write a string to interface.
+proc write*(inst: CdcInstance, s: string) {.inline.} =
+  ## Write a string.
   ##
   ## Note: automatically handles chunked writing if the transmit
   ## buffer fills up.
-  writeData(itf.uint8, s)
+  writeData(inst.uint8, s)
 
-proc write*(itf: UsbSerialInterface, s: openArray[uint8]) {.inline.} =
-  ## Write a sequence of bytes to the interface.
+proc write*(inst: CdcInstance, s: openArray[uint8]) {.inline.} =
+  ## Write a sequence of bytes.
   ##
   ## Note: automatically handles chunked writing if the transmit
   ## buffer fills up.
-  writeData(itf.uint8, s)
+  writeData(inst.uint8, s)
 
-proc write*(itf: UsbSerialInterface, c: char) {.inline.} =
-  # Write a single character to the interface.
-  discard cdcWriteChar(itf.uint8, c)
+proc write*(inst: CdcInstance, c: char) {.inline.} =
+  ## Write a single character.
+  discard cdcWriteChar(inst.uint8, c)
 
-proc writeLine*(itf: UsbSerialInterface, s: string) {.inline.} =
-  ## Write a string to interface, followed by `LF` character.
+proc writeLine*(inst: CdcInstance, s: string) {.inline.} =
+  ## Write a string, followed by `LF` character.
   ##
   ## Note: automatically handles chunked writing if the transmit
   ## buffer fills up.
-  itf.write(s)
-  itf.write('\n')
+  inst.write(s)
+  inst.write('\n')
 
-proc flush*(itf: UsbSerialInterface) {.inline.} =
-  ## Force sending any data remaining in transmit FIFO
-  discard cdcWriteFlush(itf.uint8)
+proc flush*(inst: CdcInstance) {.inline.} =
+  ## Force sending any data remaining in transmit FIFO.
+  discard cdcWriteFlush(inst.uint8)
 
 
 # CDC-specific descriptors
@@ -216,33 +218,32 @@ type
     Ncm = 0x1A
     VendorSpecific = 0xFE
 
-  ## Header Functional Descriptor
   CdcHeaderDescriptor* {.packed.} = object
+    ## Header Functional Descriptor
     length*: uint8
     descriptorType*: UsbDescriptorType
     descriptorSubtype*: CdcFunctionalDescriptorSubtype
     cdcVersion*: BcdVersion
 
-  ## Union Interface Functional Descriptor
-  ## 
-  ## N is the number of subordinate interfaces
   CdcUnionDescriptor*[N: static int] {.packed.} = object
+    ## Union Interface Functional Descriptor
+    ## 
+    ## N is the number of subordinate interfaces
     length*: uint8
     descriptorType*: UsbDescriptorType
     descriptorSubtype*: CdcFunctionalDescriptorSubtype
     controlInterface*: InterfaceNumber
     subordinates*: array[N, InterfaceNumber]
 
-  ## Call management capabilities bitset
   CallManagementCap* {.pure, size: sizeof(cchar).} = enum
+    ## Call management capabilities bitset
     CallMgmtSupported
     CallMgmtOverDci
 
-  ## Call Management Functional Descriptor
-  ## 
-  ## Ref: Universal Serial Bus Communications Class Subclass Specification for
-  ## PSTN Devices rev. 1.2
   CdcCallMgmtDescriptor* {.packed.} = object
+    ## Call Management Functional Descriptor
+    ## Ref: Universal Serial Bus Communications Class Subclass Specification for
+    ## PSTN Devices rev. 1.2
     length*: uint8
     descriptorType*: UsbDescriptorType
     descriptorSubtype*: CdcFunctionalDescriptorSubtype
@@ -255,24 +256,24 @@ type
     SendBreak
     NetworkConnection
 
-  ## Abstract Control Management Functional Descriptor
-  ## 
-  ## Ref: Universal Serial Bus Communications Class Subclass Specification for
-  ## PSTN Devices rev. 1.2
   CdcAbstractControlMgmtDescriptor* {.packed.} = object
+    ## Abstract Control Management Functional Descriptor
+    ## 
+    ## Ref: Universal Serial Bus Communications Class Subclass Specification for
+    ## PSTN Devices rev. 1.2
     length*: uint8
     descriptorType*: UsbDescriptorType
     descriptorSubtype*: CdcFunctionalDescriptorSubtype
     capabilities*: set[AbstractControlMgmtCap]
 
-  ## Complete interface descriptor structure for a CDC class "virtual USB
-  ## serial port" device. This includes the interface association (IAD),
-  ## the control and data interface descriptors, class-specific (CDC
-  ## Functional) descriptors and endpoint descriptors.
-  ## 
-  ## This should match the byte array produced by TinyUSB macro
-  ## `TUD_CDC_DESCRIPTOR`.
   CompleteCdcSerialPortInterface* {.packed.} = object
+    ## Complete interface descriptor structure for a CDC class "virtual USB
+    ## serial port" device. This includes the interface association (IAD),
+    ## the control and data interface descriptors, class-specific (CDC
+    ## Functional) descriptors and endpoint descriptors.
+    ## 
+    ## This should match the byte array produced by TinyUSB macro
+    ## `TUD_CDC_DESCRIPTOR`.
     iad*: InterfaceAssociationDescriptor
     controlItf*: InterfaceDescriptor
     cdcHeader*: CdcHeaderDescriptor
@@ -293,8 +294,8 @@ static:
   assert sizeof(CompleteCdcSerialPortInterface) == 66
 
 const
-  ## Version of CDC spec on which this code is based.
   CdcSpecVersion* = initBcdVersion(1, 2, 0)
+    ## Version of CDC spec on which this code is based.
 
   CdcCsHeader* =  CdcHeaderDescriptor(
     length: sizeof(CdcHeaderDescriptor).uint8,
