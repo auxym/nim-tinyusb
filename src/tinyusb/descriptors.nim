@@ -167,7 +167,7 @@ type
     descriptorType*: UsbDescriptorType
     totalLength*: uint16
     numInterfaces*: uint8
-    value*: uint8
+    value*: range[1'u8..uint8.high]
     str*: StringIndex
     attributes*: set[ConfigurationAttribute]
     maxPower*: uint8 # Each increment is 2 mA

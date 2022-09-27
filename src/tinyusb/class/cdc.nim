@@ -353,8 +353,8 @@ func initCdcAbstractControlMgmtDescriptor*(
   )
 
 func initCompleteCdcSerialPortInterface*(
-    controlItf: InterfaceNumber, controlEpNum: EpNumber, epNotifSize: EpSize,
-    dataEpNum:EpNumber, epDataSize: EpSize,
+    controlItf: InterfaceNumber, controlEpNum: EpNumber, controlEpSize: EpSize,
+    dataEpNum:EpNumber, dataEpSize: EpSize,
     str: StringIndex = StringIndexNone): CompleteCdcSerialPortInterface =
 
   let dataItfNum = (controlItf.uint8 + 1).InterfaceNumber
@@ -387,7 +387,7 @@ func initCompleteCdcSerialPortInterface*(
     union: initCdcUnionDescriptor(controlItf, [dataItfNum]),
 
     epNotif: initEndpointDescriptor(
-      controlEpNum, EpDirection.In, TransferType.Interrupt, epNotifSize, 16
+      controlEpNum, EpDirection.In, TransferType.Interrupt, controlEpSize, 16
     ),
 
     dataItf: initInterfaceDescriptor(
@@ -400,10 +400,10 @@ func initCompleteCdcSerialPortInterface*(
     ),
 
     dataEpOut: initEndpointDescriptor(
-      dataEpNum, EpDirection.Out, TransferType.Bulk, epDataSize, 0
+      dataEpNum, EpDirection.Out, TransferType.Bulk, dataEpSize, 0
     ),
 
     dataEpIn: initEndpointDescriptor(
-      dataEpNum, EpDirection.In, TransferType.Bulk, epDataSize, 0
+      dataEpNum, EpDirection.In, TransferType.Bulk, dataEpSize, 0
     )
   )
