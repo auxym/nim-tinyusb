@@ -18,11 +18,20 @@ proc serialize(b: var string, x: uint32) =
 
 proc serialize*[T](b: var string, x: set[T]) =
   when sizeof(set[T]) == 1:
-    b.serialize(cast[uint8](x))
+    var u: uint8
+    for elem in x:
+      u = u or (1'u8 shl elem.ord.uint8)
+    b.serialize(u)
   elif sizeof(set[T]) == 2:
-    b.serialize(cast[uint16](x))
+    var u: uint16
+    for elem in x:
+      u = u or (1'u16 shl elem.ord.uint16)
+    b.serialize(u)
   elif sizeof(set[T]) == 4:
-    b.serialize(cast[uint32](x))
+    var u: uint32
+    for elem in x:
+      u = u or (1'u32 shl elem.ord.uint32)
+    b.serialize(u)
   else:
     {.error: "serialize not implement for set of size " & sizeof(set[T]).}
 
