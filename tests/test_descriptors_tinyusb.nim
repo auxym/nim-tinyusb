@@ -63,7 +63,7 @@ suite "Validate descriptors against TinyUSB macros":
       tusbCdcDesc == nimCdcDescArr
 
   test "HID interface descriptor":
-    const desclen = sizeof(CompleteHidInterfaceDescriptor)
+    const desclen = sizeof(CompleteHidInterface)
 
     let
       tusbDesc {.importc: "desc_hid_itf".}: array[desclen, uint8]
@@ -82,7 +82,7 @@ suite "Validate descriptors against TinyUSB macros":
       nimDescBytes == tusbDesc
 
   test "HID + CDC Configuration descriptor reply":
-    const desclen = sizeof(CompleteHidInterfaceDescriptor) +
+    const desclen = sizeof(CompleteHidInterface) +
                     sizeof(CompleteCdcSerialPortInterface) +
                     sizeof(ConfigurationDescriptor)
 
