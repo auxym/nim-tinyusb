@@ -107,7 +107,7 @@ template configurationDescriptorCallback*(index, body) =
     body
 
 var calledDeviceDescriptorStringCallback {.compileTime.} = false
-template deviceDescriptorStringCallback*(index, langId, body) =
+template stringDescriptorCallback*(index, langId, body) =
   static:
     when calledDeviceDescriptorStringCallback:
       {.error: "called deviceDescriptorStringCallback twice".}

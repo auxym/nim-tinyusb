@@ -466,8 +466,9 @@ static:
   assert sizeof(HidDescriptor) == 9
   assert sizeof(CompleteHidInterface) == 25
 
-# This module is based on HID spec 1.11
-const HidVer = initBcdVersion(1, 11, 0)
+# This module is based on HID spec 1.11 (aka 1.1.1 because of USB's weird
+# versioning convention)
+const HidVer = initBcdVersion(1, 1, 1)
 
 func initHidDescriptor*(numDesc: uint8, reportDescType: HidDescriptorType,
                        reportDescLen: uint16, hidVersion=HidVer,

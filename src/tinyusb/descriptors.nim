@@ -111,8 +111,11 @@ type
 static:
   assert sizeof(set[ConfigurationAttribute]) == 1
 
-func initBcdVersion*(major: 0..255, minor: 0..15, sub: 0..15): BcdVersion =
-  BcdVersion((major.uint16 shl 8) or (minor.uint16 shl 4) or sub.uint16)
+func initBcdVersion*(major: 0..99, minor: 0..9, sub: 0..9): BcdVersion =
+  let
+    n3 = uint16(major div 10)
+    n2 = uint16(major mod 10)
+  BcdVersion((n3 shl 12) or (n2 shl 8) or (minor.uint16 shl 4) or sub.uint16)
 
 func initEpAddress*(epnum: EpNumber, dir: EpDirection): EpAddress =
   EpAddress epnum.uint8 or (dir.ord.uint8 shl 7)
