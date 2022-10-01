@@ -1,7 +1,6 @@
-import std/macros
+import encode # https://github.com/treeform/encode
 
 import ./langids
-import encode # https://github.com/treeform/encode
 import ./internal
 
 type
@@ -300,44 +299,26 @@ func initInterfaceAssociationDescriptor*(first: InterfaceNumber, count: uint8,
 
 # String descriptors
 
-proc initStringDesc0*[N](langs: openArray[LangId],
-                         dest: var array[N, uint8]) =
-  ## Create string descriptor zero, which is the
-  ##
-  ## The result is put into the byte array `dest`, which should be at least of
-  ## size `langs.len * 2 + 2`, otherwise the list of languages will be
-  ## truncated.
+proc toStringDescriptor*(utf8Str: string): string =
+  let
+    utf16str = utf8Str.toUTF16LE
+    desclen = min(0xff, utf16str.len + 2).char
+  result = desclen & UsbDescriptorType.String.char & utf16str
+
+proc toStringDesc0*(langs: openArray[LangId]): string =
+  ## Create string descriptor zero, which is the list of supported languages.
   let
     langsSize = sizeof(LangId) * langs.len
 
     # The bitwise and here results in the next lower multiple of 2, to ensure
     # that we don't cut a langid in half if we truncate.
-    descLen = uint8(
-      min([uint8.high.int, langsSize + 2, dest.len]) and (not 1)
-    )
+    descLen = min(uint8.high.int, langsSize + 2) and (not 1)
 
-  dest[0] = descLen.uint8
-  dest[1] = UsbDescriptorType.String.ord
-  copyMem(dest[2].addr, langs[0].unsafeAddr, (descLen - 2))
-
-func initStringDesc*[N](str: string, dest: var array[N, uint8]) =
-  ## Create a string descriptor from a utf8 string.
-  ##
-  ## The result is put into the byte array `dest`, which should be large enough
-  ## to fit string `str` encoded as UTF-16LE, otherwise the string will be
-  ## truncated to fit.
-  let
-    utf16str = str.toUTF16LE
-
-    # The bitwise and here results in the next lower multiple of 2, to ensure
-    # that we don't cut a codepoint in half (only works for 2-byte characters)
-    descLen = uint8(
-      min([uint8.high.int, (utf16str.len + 2), dest.len]) and (not 1)
-    )
-
-  dest[0] = descLen.uint8
-  dest[1] = UsbDescriptorType.String.ord
-  copyMem(dest[2].addr, utf16str[0].unsafeAddr, (descLen - 2))
+  result = descLen.char & UsbDescriptorType.String.char
+  for lg in langs:
+    if result.len > (0xFF - 2):
+      break
+    result.serialize(lg)
 
 func getUtf8String*(strDesc: openArray[uint8]): string =
   ## Utility function to extract a UTF-8 string from a USB String Descriptor
