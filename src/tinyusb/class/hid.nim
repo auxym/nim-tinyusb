@@ -5,7 +5,7 @@ import std/strutils
 
 import ../descriptors
 import ../internal
-import ./hid_usages
+import ./hidusages
 
 export hid_usages
 
@@ -295,14 +295,14 @@ proc sendMouseReport*(inst: HidInstance, id: byte,
   ## use template layout report as defined by hid_mouse_report_t
   ## **Parameters:**
   ##
-  ## ==========                  ===================
-  ## **itf**                     HID interface index.
-  ## **id**                      Report index for the interface.
-  ## **buttons**                 Which buttons are currently pressed.
-  ## **x, y**                    Relative x and y displacement since previous
-  ##                             report.
-  ## **horizontal, vertical**    Relative horizontal and vertical scroll since
-  ##                             previous report.
+  ## =========================     ==============================================
+  ## **itf**                       HID interface index.
+  ## **id**                        Report index for the interface.
+  ## **buttons**                   Which buttons are currently pressed.
+  ## **x, y**                      Relative x and y displacement since previous
+  ##                               report.
+  ## **horizontal, vertical**      Relative horizontal and vertical scroll since
+  ##                               previous report.
 
 proc sendGamepadReport*(inst: HidInstance, id: uint8,
     x, y, z, rz, rx, ry: int8, hat: GamepadHatPosition,
@@ -311,14 +311,14 @@ proc sendGamepadReport*(inst: HidInstance, id: uint8,
   ## Gamepad: convenient helper to send gamepad report if application
   ## use template layout report TUD_HID_REPORT_DESC_GAMEPAD
   ##
-  ## ==========   ===================
-  ## **itf**      HID interface index.
-  ## **id**       Report index for the interface.
-  ## **buttons**  Which buttons are currently pressed.
-  ## **x, y**     Left analog stick position
-  ## **z, rz**    Right analog stick position
-  ## **rx, ry**   Left and right analog trigger position
-  ## **hat**      Position of gamepad hat or D-Pad
+  ## ============   =======================================
+  ## **itf**        HID interface index.
+  ## **id**         Report index for the interface.
+  ## **buttons**    Which buttons are currently pressed.
+  ## **x, y**       Left analog stick position
+  ## **z, rz**      Right analog stick position
+  ## **rx, ry**     Left and right analog trigger position
+  ## **hat**        Position of gamepad hat or D-Pad
 {.pop}
 
 proc sendMouseReport*(inst: HidInstance, id: byte, report: MouseReport): bool =
@@ -337,11 +337,11 @@ proc sendKeyboardReport*(inst: HidInstance, id: byte, modifiers: set[KeyModifier
   ## Convenient helper to send keyboard report if application
   ## uses template layout report as defined by hid_keyboard_report_t
   ##
-  ## ==========     ===================
-  ## **itf**        HID interface index.
-  ## **id**         Report index for the interface.
-  ## **modifiers**  Currently pressed modifier keys
-  ## **key0-5**     Up to 6 keys currently pressed
+  ## ==============   ================================
+  ## **itf**          HID interface index.
+  ## **id**           Report index for the interface.
+  ## **modifiers**    Currently pressed modifier keys
+  ## **key0-5**       Up to 6 keys currently pressed
 
   let keyArr = [key0, key1, key2, key3, key4, key5]
   result = sendKeyboardReport(inst, id, cast[uint8](modifiers), cast[ptr uint8](keyArr.unsafeAddr))
@@ -351,11 +351,11 @@ proc sendKeyboardReport*(inst: HidInstance, id: byte, modifiers: set[KeyModifier
   ## Convenient helper to send keyboard report if application
   ## uses template layout report as defined by hid_keyboard_report_t
   ##
-  ## ==========     ===================
-  ## **itf**        HID interface index.
-  ## **id**         Report index for the interface.
-  ## **modifiers**  Currently pressed modifier keys
-  ## **keys**       Up to 6 keys currently pressed (use `keyNone` if fewer keys are desired)
+  ## ==============    ===================================================
+  ## **itf**           HID interface index.
+  ## **id**            Report index for the interface.
+  ## **modifiers**     Currently pressed modifier keys
+  ## **keys**          Up to 6 keys currently pressed (use `keyNone` if fewer keys are desired)
 
   var k = keys
   result = sendKeyboardReport(inst, id, cast[uint8](modifiers), cast[ptr uint8](k[0].addr))
@@ -413,7 +413,7 @@ template hidReportCompleteCallback*(itf, report, len, body) =
   ## Set the callback to be invoked when a HID input report is successfully send to host.
   ##
   ## Application can use this to send the next report
-  ## Note: For composite reports, report[0] is report ID
+  ## Note: For composite reports, `report[0]` is the report ID.
   ## This template is optional but must be called at most once.
   static:
     when calledHidReportCompleteCallback:
